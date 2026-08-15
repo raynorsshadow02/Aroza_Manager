@@ -1,10 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Product, Platform, Sale } from '@/types';
 import { recordSale } from '@/lib/data-service';
-import { formatCurrency } from '@/lib/calculations';
-import { X, ShoppingBag, AlertTriangle, TrendingUp, DollarSign, CheckCircle } from 'lucide-react';
+import { formatCurrency, getStockStatus } from '@/lib/calculations';
+import {
+  X,
+  ShoppingBag,
+  AlertTriangle,
+  TrendingUp,
+  DollarSign,
+  CheckCircle,
+  Search,
+  Package,
+  Check,
+} from 'lucide-react';
 
 interface RecordSaleModalProps {
   isOpen: boolean;
@@ -22,6 +32,8 @@ export default function RecordSaleModal({
   onSaveSuccess,
 }: RecordSaleModalProps) {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [platform, setPlatform] = useState<Platform>('Instagram');
   const [customerName, setCustomerName] = useState<string>('');
   const [orderNumber, setOrderNumber] = useState<string>('');
@@ -37,10 +49,35 @@ export default function RecordSaleModal({
   const [otherExpense, setOtherExpense] = useState<number>(0);
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [notes, setNotes] = useState<string>('');
-  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(false);
+  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // Extract unique categories
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    products.forEach((p) => {
+      if (p.category_name) cats.add(p.category_name);
+    });
+    return ['all', ...Array.from(cats)];
+  }, [products]);
+
+  // Filter products
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchesSearch =
+        searchQuery.trim() === '' ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.brand && p.brand.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesCategory =
+        selectedCategory === 'all' || p.category_name === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchQuery, selectedCategory]);
+
   const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const currentStock = Number(selectedProduct?.current_stock ?? 0);
+  const isStockInsufficient = quantity > currentStock;
 
   useEffect(() => {
     if (initialProduct) {
@@ -53,13 +90,14 @@ export default function RecordSaleModal({
 
   useEffect(() => {
     if (selectedProduct) {
-      setUnitCost(selectedProduct.purchase_price_default || 0);
+      setUnitCost(Number(selectedProduct.purchase_price_default || 0));
 
-      // Auto-set selling price depending on platform choice
-      let price = selectedProduct.selling_price_default || 0;
-      if (platform === 'Instagram' && selectedProduct.instagram_price) price = selectedProduct.instagram_price;
+      let price = Number(selectedProduct.selling_price_default || 0);
+      if (platform === 'Instagram' && selectedProduct.instagram_price) {
+        price = Number(selectedProduct.instagram_price);
+      }
       if (platform === 'Meesho') {
-        if (selectedProduct.meesho_price) price = selectedProduct.meesho_price;
+        if (selectedProduct.meesho_price) price = Number(selectedProduct.meesho_price);
         setPlatformFee(Math.round(price * 0.12));
         setShippingCharged(0);
         setShippingCost(0);
@@ -69,7 +107,7 @@ export default function RecordSaleModal({
         setShippingCost(45);
       }
       if (platform === 'Direct' && selectedProduct.direct_price) {
-        price = selectedProduct.direct_price;
+        price = Number(selectedProduct.direct_price);
         setShippingCharged(0);
         setShippingCost(0);
       }
@@ -79,13 +117,10 @@ export default function RecordSaleModal({
 
   if (!isOpen) return null;
 
-  const currentStock = selectedProduct?.current_stock || 0;
-  const isStockInsufficient = quantity > currentStock;
-
   // Calculation formulas
-  const itemsSubtotal = quantity * unitPrice;
+  const itemsSubtotal = Number(quantity) * Number(unitPrice);
   const totalRevenue = itemsSubtotal + Number(shippingCharged) - Number(discount);
-  const cogs = quantity * unitCost;
+  const cogs = Number(quantity) * Number(unitCost);
   const totalSellingExpenses =
     Number(shippingCost) + Number(platformFee) + Number(packagingCost) + Number(otherExpense);
   const netProfit = totalRevenue - cogs - totalSellingExpenses;
@@ -148,7 +183,7 @@ export default function RecordSaleModal({
             </div>
             <div>
               <h2 className="text-base lg:text-lg font-bold text-[#1B5E20]">Record New Sale</h2>
-              <p className="text-xs text-[#2E7D32]">Automatic Inventory & Profit Accounting</p>
+              <p className="text-xs text-[#2E7D32]">Visual Product Catalog & Instant Financial Accounting</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#2E7D32] hover:bg-white/60 rounded-xl">
@@ -157,63 +192,129 @@ export default function RecordSaleModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 lg:p-6 space-y-5 overflow-y-auto flex-1 text-xs">
-          {/* Product Selector */}
-          <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8E2D9] space-y-3">
-            <label className="block text-[#2D241E] font-semibold text-sm">Select Product *</label>
-            <select
-              value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-[#E8E2D9] rounded-xl font-semibold text-sm text-[#2D241E]"
-            >
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.sku}) — Stock: {p.current_stock}
-                </option>
-              ))}
-            </select>
+        <form onSubmit={handleSubmit} className="p-4 lg:p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+          {/* VISUAL CATALOG PICKER */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-[#2D241E] font-bold text-sm">
+                Select Product from Catalog *
+              </label>
+              <span className="text-[11px] text-[#6E6359]">
+                {filteredProducts.length} items available
+              </span>
+            </div>
 
-            {selectedProduct && (
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-[#E8E2D9]">
-                <span className="text-[#6E6359]">
-                  Available Stock:{' '}
-                  <strong
-                    className={
-                      currentStock <= 0
-                        ? 'text-[#DC2626]'
-                        : currentStock <= 5
-                        ? 'text-[#D97706]'
-                        : 'text-[#2E7D32]'
-                    }
-                  >
-                    {currentStock} units
-                  </strong>
-                </span>
-                <span className="text-[#6E6359]">
-                  Avg Purchase Cost: <strong>{formatCurrency(unitCost)}</strong>
-                </span>
+            {/* Catalog Search & Category Filter */}
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-[#6E6359] absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Filter by name, SKU or brand..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-xs"
+                />
               </div>
-            )}
+              {categories.length > 2 && (
+                <div className="flex gap-1 overflow-x-auto py-0.5">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold capitalize whitespace-nowrap transition-colors ${
+                        selectedCategory === cat
+                          ? 'bg-[#2E7D32] text-white'
+                          : 'bg-[#FAF7F2] text-[#6E6359] hover:bg-[#F4EBE1]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Catalog Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1.5 border border-[#E8E2D9] rounded-2xl bg-[#FAF7F2]">
+              {filteredProducts.map((p) => {
+                const isSelected = p.id === selectedProductId;
+                const stock = Number(p.current_stock ?? 0);
+                const img = p.images && p.images.length > 0 ? p.images[0].image_url : null;
+
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedProductId(p.id)}
+                    className={`cursor-pointer rounded-xl p-2 transition-all flex flex-col justify-between border ${
+                      isSelected
+                        ? 'bg-white border-[#2E7D32] shadow-sm ring-2 ring-[#2E7D32]/30'
+                        : 'bg-white border-[#E8E2D9] hover:border-[#9E5827]/40 hover:shadow-xs'
+                    }`}
+                  >
+                    <div className="relative aspect-square w-full rounded-lg bg-[#F4EBE1] overflow-hidden mb-1">
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[#9E5827]">
+                          <Package className="w-5 h-5 opacity-40" />
+                        </div>
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-[#2E7D32] text-white p-0.5 rounded-full">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-[11px] text-[#2D241E] line-clamp-1">
+                        {p.name}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-extrabold text-[#9E5827]">
+                          {formatCurrency(p.selling_price_default || 0)}
+                        </span>
+                        <span
+                          className={`font-semibold px-1 rounded ${
+                            stock > 5
+                              ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                              : stock > 0
+                              ? 'bg-[#FEF3C7] text-[#D97706]'
+                              : 'bg-[#FEE2E2] text-[#DC2626]'
+                          }`}
+                        >
+                          {stock} in stock
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Insufficient Stock Alert */}
+          {/* Insufficient Stock Alert / Backorder notice */}
           {isStockInsufficient && (
-            <div className="p-3 bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl flex items-start gap-2.5 text-[#B91C1C]">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="p-3 bg-[#FEF3C7] border border-[#FDE68A] rounded-xl flex items-start gap-2.5 text-[#92400E]">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-[#D97706]" />
               <div className="space-y-1">
-                <p className="font-bold text-xs">Insufficient Stock Warning!</p>
-                <p className="text-[11px]">
-                  You are attempting to sell <strong>{quantity}</strong> units, but only{' '}
-                  <strong>{currentStock}</strong> are in stock.
+                <p className="font-bold text-xs">
+                  Selling {quantity} units with only {currentStock} currently in stock.
                 </p>
-                <label className="flex items-center gap-2 pt-1 font-semibold text-xs cursor-pointer text-[#7F1D1D]">
+                <label className="flex items-center gap-2 pt-0.5 font-semibold text-xs cursor-pointer">
                   <input
                     type="checkbox"
                     checked={allowNegativeStock}
                     onChange={(e) => setAllowNegativeStock(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#DC2626]"
+                    className="w-4 h-4 rounded text-[#2E7D32]"
                   />
-                  Allow Stock Override / Backorder
+                  <span>Allow Stock Override / Backorder Sale</span>
                 </label>
               </div>
             </div>
@@ -248,143 +349,146 @@ export default function RecordSaleModal({
             </div>
 
             <div>
-              <label className="block text-[#2D241E] font-semibold mb-1">Sale Date</label>
-              <input
-                type="date"
-                value={saleDate}
-                onChange={(e) => setSaleDate(e.target.value)}
-                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-xs text-[#2D241E]"
-              />
+              <label className="block text-[#2D241E] font-semibold mb-1">Order # / Date</label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(e.target.value)}
+                  className="w-1/2 px-2 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-mono text-[11px]"
+                />
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                  className="w-1/2 px-2 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-[11px]"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Pricing & Quantity Inputs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Pricing & Units Sold */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#FAF7F2] rounded-xl border border-[#E8E2D9]">
             <div>
-              <label className="block text-[#2D241E] font-semibold mb-1">Quantity Sold *</label>
+              <label className="block text-[#2D241E] font-bold mb-1">Quantity Sold *</label>
               <input
                 type="number"
                 min="1"
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-bold text-sm text-[#2D241E]"
+                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                className="w-full px-3 py-2 bg-white border border-[#E8E2D9] rounded-xl font-extrabold text-sm text-[#2D241E]"
               />
             </div>
 
             <div>
-              <label className="block text-[#2D241E] font-semibold mb-1">Unit Selling Price (₹)</label>
+              <label className="block text-[#2D241E] font-bold mb-1">Unit Selling Price (₹) *</label>
               <input
                 type="number"
                 min="0"
                 required
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-bold text-sm text-[#9E5827]"
+                className="w-full px-3 py-2 bg-white border border-[#E8E2D9] rounded-xl font-extrabold text-sm text-[#9E5827]"
               />
             </div>
 
             <div>
-              <label className="block text-[#2D241E] font-semibold mb-1">Shipping Charged (₹)</label>
+              <label className="block text-[#6E6359] font-medium mb-1">Unit Cost Price (₹)</label>
               <input
                 type="number"
                 min="0"
-                value={shippingCharged}
-                onChange={(e) => setShippingCharged(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-xs text-[#2D241E]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[#2D241E] font-semibold mb-1">Discount (₹)</label>
-              <input
-                type="number"
-                min="0"
-                value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-xs text-[#2D241E]"
+                value={unitCost}
+                onChange={(e) => setUnitCost(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-white border border-[#E8E2D9] rounded-xl font-semibold text-xs text-[#6E6359]"
               />
             </div>
           </div>
 
-          {/* Selling Expenses Breakdown */}
-          <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8E2D9] space-y-2">
-            <span className="text-[11px] font-semibold text-[#6E6359] block uppercase tracking-wider">
-              Selling Costs Paid by Aroza Collectibles
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <span className="text-[10px] text-[#6E6359]">Courier Shipping Cost (₹)</span>
-                <input
-                  type="number"
-                  value={shippingCost}
-                  onChange={(e) => setShippingCost(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 bg-white border border-[#E8E2D9] rounded-lg text-xs"
-                />
-              </div>
+          {/* Cost Deductions & Logistics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div>
+              <label className="block text-[#6E6359] text-[11px] font-medium mb-1">Shipping Charged (₹)</label>
+              <input
+                type="number"
+                value={shippingCharged}
+                onChange={(e) => setShippingCharged(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg text-xs"
+              />
+            </div>
 
-              <div>
-                <span className="text-[10px] text-[#6E6359]">Platform Comm. Fee (₹)</span>
-                <input
-                  type="number"
-                  value={platformFee}
-                  onChange={(e) => setPlatformFee(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 bg-white border border-[#E8E2D9] rounded-lg text-xs"
-                />
-              </div>
+            <div>
+              <label className="block text-[#6E6359] text-[11px] font-medium mb-1">Shipping Cost (₹)</label>
+              <input
+                type="number"
+                value={shippingCost}
+                onChange={(e) => setShippingCost(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg text-xs"
+              />
+            </div>
 
-              <div>
-                <span className="text-[10px] text-[#6E6359]">Packaging Cost (₹)</span>
-                <input
-                  type="number"
-                  value={packagingCost}
-                  onChange={(e) => setPackagingCost(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 bg-white border border-[#E8E2D9] rounded-lg text-xs"
-                />
-              </div>
+            <div>
+              <label className="block text-[#6E6359] text-[11px] font-medium mb-1">Platform Fee (₹)</label>
+              <input
+                type="number"
+                value={platformFee}
+                onChange={(e) => setPlatformFee(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[#6E6359] text-[11px] font-medium mb-1">Packaging Cost (₹)</label>
+              <input
+                type="number"
+                value={packagingCost}
+                onChange={(e) => setPackagingCost(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-lg text-xs"
+              />
             </div>
           </div>
 
           {/* REAL TIME PROFIT CALCULATION SUMMARY CARD */}
-          <div className="p-4 rounded-2xl bg-[#E8F5E9] border border-[#A5D6A7] space-y-3">
-            <div className="flex items-center justify-between border-b border-[#A5D6A7] pb-2">
-              <span className="font-semibold text-xs text-[#1B5E20]">Estimated Net Profit</span>
-              <span className="text-xl font-extrabold text-[#2E7D32]">
+          <div className="p-4 bg-gradient-to-br from-[#E8F5E9] to-[#F1F8E9] border border-[#A5D6A7] rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-[#1B5E20]">Estimated Net Profit</span>
+              <span className="text-xl font-black text-[#1B5E20]">
                 +{formatCurrency(netProfit)}
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+            <div className="grid grid-cols-3 gap-2 text-center text-[10px] pt-2 border-t border-[#A5D6A7]/50">
               <div>
-                <span className="text-[#2E7D32] block">Total Revenue:</span>
-                <span className="font-bold text-[#1B5E20]">{formatCurrency(totalRevenue)}</span>
+                <span className="text-[#6E6359] block">Revenue</span>
+                <span className="font-bold text-[#2E7D32]">{formatCurrency(totalRevenue)}</span>
               </div>
               <div>
-                <span className="text-[#2E7D32] block">Product COGS:</span>
-                <span className="font-bold text-[#1B5E20]">{formatCurrency(cogs)}</span>
+                <span className="text-[#6E6359] block">COGS</span>
+                <span className="font-bold text-[#6E6359]">-{formatCurrency(cogs)}</span>
               </div>
               <div>
-                <span className="text-[#2E7D32] block">Profit Margin:</span>
-                <span className="font-bold text-[#2E7D32]">{profitMargin.toFixed(1)}%</span>
+                <span className="text-[#6E6359] block">Margin</span>
+                <span className="font-bold text-[#1B5E20]">{profitMargin.toFixed(1)}%</span>
               </div>
             </div>
           </div>
 
-          {/* Submit Action */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E2D9]">
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#E8E2D9]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-[#E8E2D9] text-[#6E6359] font-medium hover:bg-[#FAF7F2]"
+              className="px-4 py-2.5 rounded-xl border border-[#E8E2D9] text-[#6E6359] font-bold text-xs hover:bg-[#FAF7F2]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-xl bg-[#2E7D32] text-white font-bold hover:bg-[#256628] shadow-md disabled:opacity-50"
+              disabled={isSubmitting || !selectedProduct}
+              className="px-6 py-2.5 rounded-xl bg-[#2E7D32] text-white font-extrabold text-xs hover:bg-[#256628] shadow-sm disabled:opacity-50 flex items-center gap-1.5"
             >
-              {isSubmitting ? 'Recording...' : 'Record Sale'}
+              <CheckCircle className="w-4 h-4" />
+              {isSubmitting ? 'Recording...' : `Record Sale (${formatCurrency(totalRevenue)})`}
             </button>
           </div>
         </form>

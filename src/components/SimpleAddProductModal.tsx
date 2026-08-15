@@ -100,7 +100,7 @@ export default function SimpleAddProductModal({
       instagram_price: Number(sellingPrice) || 0,
       meesho_price: Math.round(Number(sellingPrice) * 1.15),
       direct_price: Math.round(Number(sellingPrice) * 0.9),
-      current_stock: Number(quantity) || 0,
+      current_stock: editingProduct ? (Number(quantity) || 0) : 0,
       supplier_name: supplierOrLocation,
       images: [
         {

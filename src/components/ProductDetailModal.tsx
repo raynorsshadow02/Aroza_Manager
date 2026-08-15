@@ -71,7 +71,8 @@ export default function ProductDetailModal({
 
   if (!isOpen || !product) return null;
 
-  const stockStatus = getStockStatus(product.current_stock, product.min_reorder_level || 5);
+  const stock = Number(product.current_stock ?? 0);
+  const stockStatus = getStockStatus(stock, product.min_reorder_level || 5);
   const financials = calculateProductFinancials(product, purchases, sales);
 
   // Filter sales & purchases for this product

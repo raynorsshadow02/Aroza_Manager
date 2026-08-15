@@ -17,8 +17,9 @@ export function roundMoney(amount: number): number {
 }
 
 export function getStockStatus(currentStock: number, reorderLevel: number = 5): StockStatus {
-  if (currentStock <= 0) return 'Out of Stock';
-  if (currentStock <= reorderLevel) return 'Low Stock';
+  const stock = Number(currentStock ?? 0);
+  if (stock <= 0) return 'Out of Stock';
+  if (stock <= reorderLevel) return 'Low Stock';
   return 'In Stock';
 }
 
@@ -41,10 +42,10 @@ export function calculateWeightedAverageCost(product: Product, purchases: Purcha
   let totalQty = 0;
 
   purchases.forEach((purchase) => {
-    purchase.items.forEach((item) => {
+    (purchase.items || []).forEach((item) => {
       if (item.product_id === product.id) {
-        totalCost += roundMoney(item.quantity * item.unit_cost);
-        totalQty += item.quantity;
+        totalCost += roundMoney(Number(item.quantity || 0) * Number(item.unit_cost || 0));
+        totalQty += Number(item.quantity || 0);
       }
     });
   });
@@ -53,7 +54,7 @@ export function calculateWeightedAverageCost(product: Product, purchases: Purcha
     return roundMoney(totalCost / totalQty);
   }
 
-  return roundMoney(product.purchase_price_default || 0);
+  return roundMoney(Number(product.purchase_price_default || 0));
 }
 
 /**
@@ -68,17 +69,19 @@ export function calculateProductFinancials(
   let totalPurchaseCost = 0;
 
   purchases.forEach((p) => {
-    p.items.forEach((item) => {
+    (p.items || []).forEach((item) => {
       if (item.product_id === product.id) {
-        totalPurchased += item.quantity;
-        totalPurchaseCost += roundMoney(item.quantity * item.unit_cost);
+        const qty = Number(item.quantity || 0);
+        const cost = Number(item.unit_cost || 0);
+        totalPurchased += qty;
+        totalPurchaseCost += roundMoney(qty * cost);
       }
     });
   });
 
   const avgPurchaseCost = totalPurchased > 0
     ? roundMoney(totalPurchaseCost / totalPurchased)
-    : roundMoney(product.purchase_price_default || 0);
+    : roundMoney(Number(product.purchase_price_default || 0));
 
   let totalSold = 0;
   let revenueGenerated = 0;
@@ -87,34 +90,36 @@ export function calculateProductFinancials(
   sales.forEach((s) => {
     if (s.fulfillment_status === 'Cancelled') return;
 
-    s.items.forEach((item) => {
+    (s.items || []).forEach((item) => {
       if (item.product_id === product.id) {
-        totalSold += item.quantity;
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.unit_price || 0);
+        const cost = Number(item.unit_cost || avgPurchaseCost);
+        totalSold += qty;
         
-        // Exclude platform-collected shipping from Aroza product revenue
+        const itemCount = s.items.length || 1;
         const isPlatformShipping = s.platform === 'Meesho';
-        const shippingAlloc = isPlatformShipping ? 0 : roundMoney((s.shipping_charged || 0) / s.items.length);
-        const discountAlloc = roundMoney((s.discount || 0) / s.items.length);
+        const shippingAlloc = isPlatformShipping ? 0 : roundMoney(Number(s.shipping_charged || 0) / itemCount);
+        const discountAlloc = roundMoney(Number(s.discount || 0) / itemCount);
         
-        const itemRevenue = roundMoney((item.quantity * item.unit_price) + shippingAlloc - discountAlloc - (s.refund_amount || 0));
+        const itemRevenue = roundMoney((qty * price) + shippingAlloc - discountAlloc - Number(s.refund_amount || 0));
         revenueGenerated += itemRevenue;
 
-        const itemCogs = roundMoney(item.quantity * (item.unit_cost || avgPurchaseCost));
+        const itemCogs = roundMoney(qty * cost);
         totalCogsSold += itemCogs;
       }
     });
   });
 
-  const currentStock = Math.max(
-    0,
-    totalPurchased - totalSold - (product.damaged_qty || 0) + (product.returned_qty || 0)
-  );
+  // Source of truth for current stock is the product's actual stock level
+  const currentStock = Number(product.current_stock ?? (totalPurchased - totalSold));
+  const effectiveStockForValuation = Math.max(0, currentStock);
 
-  const inventoryValue = roundMoney(currentStock * avgPurchaseCost);
+  const inventoryValue = roundMoney(effectiveStockForValuation * avgPurchaseCost);
   const grossProfit = roundMoney(revenueGenerated - totalCogsSold);
   const profitMargin = revenueGenerated > 0 ? roundMoney((grossProfit / revenueGenerated) * 100) : 0;
   const potentialRemainingProfit = roundMoney(
-    Math.max(0, (currentStock * product.selling_price_default) - inventoryValue)
+    Math.max(0, (effectiveStockForValuation * Number(product.selling_price_default || 0)) - inventoryValue)
   );
 
   return {
@@ -137,7 +142,7 @@ export function filterByDateRange<
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   return items.filter((item) => {
-    const itemDateStr = item.date || item.purchase_date || item.sale_date || item.created_at;
+    const itemDateStr = item.date || item.sale_date || item.purchase_date || item.created_at;
     if (!itemDateStr) return true;
     const date = new Date(itemDateStr);
 
@@ -185,39 +190,52 @@ export function calculateDashboardStats(
 ): DashboardStats {
   const validSales = sales.filter((s) => s.fulfillment_status !== 'Cancelled');
 
-  // 1. Total Realized Revenue (excluding platform-collected shipping & refunds)
+  // 1. Total Realized Revenue
   const total_revenue = validSales.reduce((acc, s) => {
+    if (typeof s.total_revenue === 'number' && !isNaN(s.total_revenue) && s.total_revenue > 0) {
+      return roundMoney(acc + Number(s.total_revenue));
+    }
     const platformCollectedShipping = s.platform === 'Meesho';
-    const effectiveShipping = platformCollectedShipping ? 0 : (s.shipping_charged || 0);
-    const itemTotal = s.items.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
-    const netSaleRev = roundMoney(itemTotal + effectiveShipping - (s.discount || 0) - (s.refund_amount || 0));
-    return roundMoney(acc + netSaleRev);
+    const effectiveShipping = platformCollectedShipping ? 0 : Number(s.shipping_charged || 0);
+    const itemTotal = (s.items || []).reduce(
+      (sum, i) => sum + (Number(i.quantity || 0) * Number(i.unit_price || 0)),
+      0
+    );
+    const netSaleRev = itemTotal + effectiveShipping - Number(s.discount || 0) - Number(s.refund_amount || 0);
+    return roundMoney(acc + Math.max(0, netSaleRev));
   }, 0);
 
   // 2. COGS (Cost of Goods Sold)
   const total_cogs = validSales.reduce((acc, s) => {
-    const saleCogs = s.items.reduce((sum, i) => sum + (i.quantity * i.unit_cost), 0);
+    if (typeof s.total_cost === 'number' && !isNaN(s.total_cost) && s.total_cost > 0) {
+      return roundMoney(acc + Number(s.total_cost));
+    }
+    const saleCogs = (s.items || []).reduce(
+      (sum, i) => sum + (Number(i.quantity || 0) * Number(i.unit_cost || 0)),
+      0
+    );
     return roundMoney(acc + saleCogs);
   }, 0);
 
   // 3. Gross Profit
   const gross_profit = roundMoney(total_revenue - total_cogs);
 
-  // 4. Selling Expenses (shipping cost paid + platform fee + packaging cost + other)
-  const total_selling_expenses = validSales.reduce(
-    (acc, s) =>
-      roundMoney(
-        acc +
-          (s.shipping_cost || 0) +
-          (s.platform_fee || 0) +
-          (s.packaging_cost || 0) +
-          (s.other_expense || 0)
-      ),
-    0
-  );
+  // 4. Selling Expenses
+  const total_selling_expenses = validSales.reduce((acc, s) => {
+    if (typeof s.total_selling_expenses === 'number' && !isNaN(s.total_selling_expenses)) {
+      return roundMoney(acc + Number(s.total_selling_expenses));
+    }
+    return roundMoney(
+      acc +
+        Number(s.shipping_cost || 0) +
+        Number(s.platform_fee || 0) +
+        Number(s.packaging_cost || 0) +
+        Number(s.other_expense || 0)
+    );
+  }, 0);
 
   // 5. Standalone Operating Expenses
-  const total_operating_expenses = expenses.reduce((acc, e) => roundMoney(acc + (e.amount || 0)), 0);
+  const total_operating_expenses = expenses.reduce((acc, e) => roundMoney(acc + Number(e.amount || 0)), 0);
 
   // 6. Total Expenses
   const total_expenses = roundMoney(total_selling_expenses + total_operating_expenses);
@@ -226,23 +244,23 @@ export function calculateDashboardStats(
   const total_profit = roundMoney(gross_profit - total_expenses);
 
   // 8. Total Investment (Total purchase orders)
-  const total_investment = purchases.reduce((acc, p) => roundMoney(acc + (p.total_amount || 0)), 0);
+  const total_investment = purchases.reduce((acc, p) => roundMoney(acc + Number(p.total_amount || 0)), 0);
 
-  // 9. Inventory Valuation
+  // 9. Current Inventory Valuation
   const current_inventory_value = products.reduce((acc, product) => {
-    const fin = calculateProductFinancials(product, purchases, sales);
-    return roundMoney(acc + fin.inventoryValue);
+    const stock = Number(product.current_stock ?? 0);
+    const unitCost = Number(product.purchase_price_default ?? 0);
+    return roundMoney(acc + (Math.max(0, stock) * unitCost));
   }, 0);
 
   // 10. Counts
   const total_products = products.length;
   const total_units_in_stock = products.reduce((acc, product) => {
-    const fin = calculateProductFinancials(product, purchases, sales);
-    return acc + fin.currentStock;
+    return acc + Number(product.current_stock ?? 0);
   }, 0);
 
   const units_sold = validSales.reduce((acc, s) => {
-    return acc + s.items.reduce((sum, item) => sum + item.quantity, 0);
+    return acc + (s.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   }, 0);
 
   const overall_profit_margin = total_revenue > 0 ? roundMoney((total_profit / total_revenue) * 100) : 0;
@@ -262,45 +280,34 @@ export function calculateDashboardStats(
 }
 
 /**
- * Cash Flow Tracking System (Strictly Separates Liquidity Cash Flow from Accrual Profit)
+ * Cash Flow Tracking System
  */
 export function calculateCashFlowStats(
   purchases: Purchase[],
   sales: Sale[],
   expenses: Expense[]
 ): CashFlowStats {
-  let cashReceived = 0;
-  let outstandingPayments = 0;
-  let totalRefunds = 0;
+  const cashReceived = sales
+    .filter((s) => s.payment_status === 'Paid' && s.fulfillment_status !== 'Cancelled')
+    .reduce((acc, s) => {
+      const rev = Number(s.total_revenue || 0);
+      const fee = Number(s.platform_fee || 0);
+      return roundMoney(acc + (rev - fee));
+    }, 0);
 
-  sales.forEach((s) => {
-    if (s.fulfillment_status === 'Cancelled') return;
+  const purchasesCash = purchases.reduce((acc, p) => roundMoney(acc + Number(p.total_amount || 0)), 0);
+  const expensesCash = expenses.reduce((acc, e) => roundMoney(acc + Number(e.amount || 0)), 0);
+  const salesShippingSpent = sales
+    .filter((s) => s.fulfillment_status !== 'Cancelled')
+    .reduce((acc, s) => roundMoney(acc + Number(s.shipping_cost || 0) + Number(s.packaging_cost || 0)), 0);
 
-    const platformCollectedShipping = s.platform === 'Meesho';
-    const effectiveShipping = platformCollectedShipping ? 0 : (s.shipping_charged || 0);
-    const itemTotal = s.items.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
-    const saleNetRev = roundMoney(itemTotal + effectiveShipping - (s.discount || 0));
-
-    if (s.payment_status === 'Paid') {
-      cashReceived = roundMoney(cashReceived + saleNetRev - (s.platform_fee || 0) - (s.refund_amount || 0));
-    } else if (s.payment_status === 'Pending') {
-      outstandingPayments = roundMoney(outstandingPayments + saleNetRev);
-    }
-
-    if (s.refund_amount && s.refund_amount > 0) {
-      totalRefunds = roundMoney(totalRefunds + s.refund_amount);
-    }
-  });
-
-  const cashSpentPurchases = purchases.reduce((acc, p) => roundMoney(acc + (p.total_amount || 0)), 0);
-  const cashSpentExpenses = expenses.reduce((acc, e) => roundMoney(acc + (e.amount || 0)), 0);
-  const cashSpentShipping = sales.reduce(
-    (acc, s) => (s.fulfillment_status === 'Cancelled' ? acc : roundMoney(acc + (s.shipping_cost || 0))),
-    0
-  );
-
-  const cashSpent = roundMoney(cashSpentPurchases + cashSpentExpenses + cashSpentShipping);
+  const cashSpent = roundMoney(purchasesCash + expensesCash + salesShippingSpent);
   const netCashFlow = roundMoney(cashReceived - cashSpent);
+  const outstandingPayments = sales
+    .filter((s) => s.payment_status === 'Pending' && s.fulfillment_status !== 'Cancelled')
+    .reduce((acc, s) => roundMoney(acc + Number(s.total_revenue || 0)), 0);
+
+  const totalRefunds = sales.reduce((acc, s) => roundMoney(acc + Number(s.refund_amount || 0)), 0);
 
   return {
     cashReceived,

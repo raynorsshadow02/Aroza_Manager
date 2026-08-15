@@ -60,7 +60,6 @@ function setItem<T>(key: string, val: T): void {
 export function initLocalStorage(forceReset: boolean = false): void {
   if (typeof window === 'undefined') return;
 
-  // Only seed sample data when explicitly allowed (development mode or SEED_DATA env flag)
   const allowSeed = process.env.NEXT_PUBLIC_ENABLE_SEED === 'true' || process.env.NODE_ENV === 'development';
   if (!allowSeed && !forceReset) return;
 
@@ -181,10 +180,25 @@ export async function getProducts(): Promise<Product[]> {
       .from('products')
       .select('*, product_images(*)')
       .order('created_at', { ascending: false });
-    if (!error && data) return data;
+
+    if (!error && data) {
+      return data.map((p: any) => ({
+        ...p,
+        current_stock: Number(p.current_stock ?? 0),
+        purchase_price_default: Number(p.purchase_price_default ?? 0),
+        selling_price_default: Number(p.selling_price_default ?? 0),
+        images: (p.product_images && p.product_images.length > 0) ? p.product_images : p.images || [],
+      }));
+    }
   }
   initLocalStorage();
-  return getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  const raw = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  return raw.map((p) => ({
+    ...p,
+    current_stock: Number(p.current_stock ?? 0),
+    purchase_price_default: Number(p.purchase_price_default ?? 0),
+    selling_price_default: Number(p.selling_price_default ?? 0),
+  }));
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
@@ -193,15 +207,9 @@ export async function getProductById(id: string): Promise<Product | null> {
 }
 
 export async function saveProduct(product: Partial<Product>): Promise<Product> {
-  if (isSupabaseConfigured() && supabase) {
-    if (product.id) {
-      const { data } = await supabase.from('products').update(product).eq('id', product.id).select().single();
-      if (data) return data;
-    } else {
-      const { data } = await supabase.from('products').insert([product]).select().single();
-      if (data) return data;
-    }
-  }
+  const cleanStock = Number(product.current_stock ?? 0);
+  const cleanPurchasePrice = Number(product.purchase_price_default ?? 0);
+  const cleanSellingPrice = Number(product.selling_price_default ?? 0);
 
   const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 
@@ -211,9 +219,18 @@ export async function saveProduct(product: Partial<Product>): Promise<Product> {
       products[idx] = {
         ...products[idx],
         ...product,
+        current_stock: cleanStock,
+        purchase_price_default: cleanPurchasePrice,
+        selling_price_default: cleanSellingPrice,
         updated_at: new Date().toISOString(),
       };
       setItem(STORAGE_KEYS.PRODUCTS, products);
+
+      if (isSupabaseConfigured() && supabase) {
+        const { images, category_name, supplier_name, ...dbPayload } = products[idx] as any;
+        await supabase.from('products').update(dbPayload).eq('id', product.id);
+      }
+
       return products[idx];
     }
   }
@@ -230,14 +247,14 @@ export async function saveProduct(product: Partial<Product>): Promise<Product> {
     tags: product.tags || [],
     supplier_id: product.supplier_id || '',
     supplier_name: product.supplier_name || '',
-    purchase_price_default: product.purchase_price_default || 0,
-    selling_price_default: product.selling_price_default || 0,
-    instagram_price: product.instagram_price || product.selling_price_default || 0,
-    meesho_price: product.meesho_price || product.selling_price_default || 0,
-    direct_price: product.direct_price || product.selling_price_default || 0,
-    other_platform_price: product.other_platform_price || product.selling_price_default || 0,
-    min_reorder_level: product.min_reorder_level || 5,
-    current_stock: product.current_stock || 0,
+    purchase_price_default: cleanPurchasePrice,
+    selling_price_default: cleanSellingPrice,
+    instagram_price: Number(product.instagram_price ?? cleanSellingPrice),
+    meesho_price: Number(product.meesho_price ?? cleanSellingPrice),
+    direct_price: Number(product.direct_price ?? cleanSellingPrice),
+    other_platform_price: Number(product.other_platform_price ?? cleanSellingPrice),
+    min_reorder_level: Number(product.min_reorder_level ?? 5),
+    current_stock: cleanStock,
     damaged_qty: 0,
     returned_qty: 0,
     images: product.images || [
@@ -251,6 +268,20 @@ export async function saveProduct(product: Partial<Product>): Promise<Product> {
     ],
     created_at: new Date().toISOString(),
   };
+
+  if (isSupabaseConfigured() && supabase) {
+    const { images, category_name, supplier_name, ...dbPayload } = newProduct as any;
+    const { data } = await supabase.from('products').insert([dbPayload]).select().single();
+    if (data && newProduct.images && newProduct.images.length > 0) {
+      const imgPayloads = newProduct.images.map((img) => ({
+        product_id: data.id,
+        image_url: img.image_url,
+        is_main: img.is_main,
+        display_order: img.display_order,
+      }));
+      await supabase.from('product_images').insert(imgPayloads);
+    }
+  }
 
   products.unshift(newProduct);
   setItem(STORAGE_KEYS.PRODUCTS, products);
@@ -294,31 +325,30 @@ export async function reconcileInventory(
   const product = products.find((p) => p.id === productId);
   if (!product) return null;
 
-  const systemStock = product.current_stock || 0;
-  const difference = physicalStock - systemStock;
+  const systemStock = Number(product.current_stock ?? 0);
+  const difference = Number(physicalStock) - systemStock;
 
-  if (difference === 0) return product; // No change needed
+  if (difference === 0) return product;
 
   const updatedProduct: Product = {
     ...product,
-    current_stock: physicalStock,
+    current_stock: Number(physicalStock),
     updated_at: new Date().toISOString(),
   };
 
   if (isSupabaseConfigured() && supabase) {
-    await supabase.from('products').update({ current_stock: physicalStock }).eq('id', productId);
+    await supabase.from('products').update({ current_stock: Number(physicalStock) }).eq('id', productId);
     await supabase.from('reconciliations').insert([
       {
         product_id: productId,
         system_stock: systemStock,
-        physical_stock: physicalStock,
+        physical_stock: Number(physicalStock),
         difference,
         reason,
       },
     ]);
   }
 
-  // Update localStorage
   const allProds = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   const pIdx = allProds.findIndex((p) => p.id === productId);
   if (pIdx !== -1) {
@@ -326,15 +356,14 @@ export async function reconcileInventory(
     setItem(STORAGE_KEYS.PRODUCTS, allProds);
   }
 
-  // Create audit stock movement
   await recordStockMovement({
     product_id: productId,
     product_name: product.name,
     movement_type: 'ADJUSTMENT',
     reference_type: 'RECONCILIATION',
     quantity_changed: difference,
-    cost_per_unit: product.purchase_price_default || 0,
-    resulting_stock: physicalStock,
+    cost_per_unit: Number(product.purchase_price_default || 0),
+    resulting_stock: Number(physicalStock),
     notes: `Reconciliation Audit: ${reason} (System: ${systemStock} -> Physical: ${physicalStock})`,
   });
 
@@ -344,7 +373,7 @@ export async function reconcileInventory(
     product_id: productId,
     product_name: product.name,
     system_stock: systemStock,
-    physical_stock: physicalStock,
+    physical_stock: Number(physicalStock),
     difference,
     reason,
     created_at: new Date().toISOString(),
@@ -367,24 +396,45 @@ export async function getReconciliations(): Promise<ReconciliationRecord[]> {
 // ==========================================
 export async function getPurchases(): Promise<Purchase[]> {
   if (isSupabaseConfigured() && supabase) {
-    const { data, error } = await supabase.from('purchases').select('*, purchase_items(*)').order('purchase_date', { ascending: false });
-    if (!error && data) return data;
+    const { data, error } = await supabase
+      .from('purchases')
+      .select('*, purchase_items(*)')
+      .order('purchase_date', { ascending: false });
+
+    if (!error && data) {
+      return data.map((p: any) => ({
+        ...p,
+        total_amount: Number(p.total_amount || 0),
+        items: (p.purchase_items || p.items || []).map((i: any) => ({
+          ...i,
+          quantity: Number(i.quantity || 0),
+          unit_cost: Number(i.unit_cost || 0),
+          total_cost: Number(i.total_cost || 0),
+        })),
+      }));
+    }
   }
   initLocalStorage();
-  return getItem<Purchase[]>(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
+  const raw = getItem<Purchase[]>(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
+  return raw.map((p) => ({
+    ...p,
+    total_amount: Number(p.total_amount || 0),
+    items: (p.items || []).map((i) => ({
+      ...i,
+      quantity: Number(i.quantity || 0),
+      unit_cost: Number(i.unit_cost || 0),
+      total_cost: Number(i.total_cost || 0),
+    })),
+  }));
 }
 
 export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'created_at'>): Promise<Purchase> {
   const newPurchase: Purchase = {
     ...purchaseData,
     id: `pur-${Date.now()}`,
+    total_amount: Number(purchaseData.total_amount || 0),
     created_at: new Date().toISOString(),
   };
-
-  if (isSupabaseConfigured() && supabase) {
-    const { data } = await supabase.from('purchases').insert([newPurchase]).select().single();
-    if (data) return data;
-  }
 
   const purchases = getItem<Purchase[]>(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
   purchases.unshift(newPurchase);
@@ -396,12 +446,11 @@ export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'create
     const pIdx = products.findIndex((p) => p.id === item.product_id);
     if (pIdx !== -1) {
       const prod = products[pIdx];
-      const oldStock = prod.current_stock || 0;
-      const oldAvgCost = prod.purchase_price_default || 0;
-      const newQty = item.quantity;
-      const newUnitCost = item.unit_cost;
+      const oldStock = Number(prod.current_stock ?? 0);
+      const oldAvgCost = Number(prod.purchase_price_default ?? 0);
+      const newQty = Number(item.quantity ?? 0);
+      const newUnitCost = Number(item.unit_cost ?? 0);
 
-      // Weighted Average Unit Cost formula
       const newStock = oldStock + newQty;
       const weightedAvgCost = newStock > 0
         ? Math.round((((oldStock * oldAvgCost) + (newQty * newUnitCost)) / newStock + Number.EPSILON) * 100) / 100
@@ -409,6 +458,13 @@ export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'create
 
       products[pIdx].current_stock = newStock;
       products[pIdx].purchase_price_default = weightedAvgCost;
+
+      if (isSupabaseConfigured() && supabase) {
+        await supabase
+          .from('products')
+          .update({ current_stock: newStock, purchase_price_default: weightedAvgCost })
+          .eq('id', prod.id);
+      }
 
       await recordStockMovement({
         product_id: prod.id,
@@ -430,10 +486,25 @@ export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'create
     const suppliers = getItem<Supplier[]>(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
     const sIdx = suppliers.findIndex((s) => s.id === newPurchase.supplier_id);
     if (sIdx !== -1) {
-      suppliers[sIdx].total_purchased_amount = (suppliers[sIdx].total_purchased_amount || 0) + newPurchase.total_amount;
-      suppliers[sIdx].total_purchases_count = (suppliers[sIdx].total_purchases_count || 0) + 1;
+      suppliers[sIdx].total_purchased_amount = (Number(suppliers[sIdx].total_purchased_amount) || 0) + newPurchase.total_amount;
+      suppliers[sIdx].total_purchases_count = (Number(suppliers[sIdx].total_purchases_count) || 0) + 1;
       suppliers[sIdx].last_purchase_date = newPurchase.purchase_date;
       setItem(STORAGE_KEYS.SUPPLIERS, suppliers);
+    }
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    const { items, ...dbPurchase } = newPurchase as any;
+    const { data } = await supabase.from('purchases').insert([dbPurchase]).select().single();
+    if (data && newPurchase.items && newPurchase.items.length > 0) {
+      const itemsPayload = newPurchase.items.map((i) => ({
+        purchase_id: data.id,
+        product_id: i.product_id,
+        quantity: i.quantity,
+        unit_cost: i.unit_cost,
+        total_cost: i.total_cost,
+      }));
+      await supabase.from('purchase_items').insert(itemsPayload);
     }
   }
 
@@ -441,6 +512,9 @@ export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'create
 }
 
 export async function deletePurchase(id: string): Promise<boolean> {
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('purchases').delete().eq('id', id);
+  }
   const purchases = getItem<Purchase[]>(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
   const filtered = purchases.filter((p) => p.id !== id);
   setItem(STORAGE_KEYS.PURCHASES, filtered);
@@ -452,37 +526,75 @@ export async function deletePurchase(id: string): Promise<boolean> {
 // ==========================================
 export async function getSales(): Promise<Sale[]> {
   if (isSupabaseConfigured() && supabase) {
-    const { data, error } = await supabase.from('sales').select('*, sale_items(*)').order('sale_date', { ascending: false });
-    if (!error && data) return data;
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*, sale_items(*)')
+      .order('sale_date', { ascending: false });
+
+    if (!error && data) {
+      return data.map((s: any) => ({
+        ...s,
+        total_revenue: Number(s.total_revenue || 0),
+        total_cost: Number(s.total_cost || 0),
+        net_profit: Number(s.net_profit || 0),
+        total_selling_expenses: Number(s.total_selling_expenses || 0),
+        items: (s.sale_items || s.items || []).map((i: any) => ({
+          ...i,
+          quantity: Number(i.quantity || 0),
+          unit_price: Number(i.unit_price || 0),
+          unit_cost: Number(i.unit_cost || 0),
+        })),
+      }));
+    }
   }
   initLocalStorage();
-  return getItem<Sale[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
+  const raw = getItem<Sale[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
+  return raw.map((s) => ({
+    ...s,
+    total_revenue: Number(s.total_revenue || 0),
+    total_cost: Number(s.total_cost || 0),
+    net_profit: Number(s.net_profit || 0),
+    total_selling_expenses: Number(s.total_selling_expenses || 0),
+    items: (s.items || []).map((i) => ({
+      ...i,
+      quantity: Number(i.quantity || 0),
+      unit_price: Number(i.unit_price || 0),
+      unit_cost: Number(i.unit_cost || 0),
+    })),
+  }));
 }
 
 export async function recordSale(saleData: Omit<Sale, 'id' | 'created_at'>): Promise<Sale> {
   const newSale: Sale = {
     ...saleData,
     id: `sale-${Date.now()}`,
+    total_revenue: Number(saleData.total_revenue || 0),
+    total_cost: Number(saleData.total_cost || 0),
+    net_profit: Number(saleData.net_profit || 0),
+    total_selling_expenses: Number(saleData.total_selling_expenses || 0),
     created_at: new Date().toISOString(),
   };
-
-  if (isSupabaseConfigured() && supabase) {
-    const { data } = await supabase.from('sales').insert([newSale]).select().single();
-    if (data) return data;
-  }
 
   const sales = getItem<Sale[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
   sales.unshift(newSale);
   setItem(STORAGE_KEYS.SALES, sales);
 
-  // Decrement product inventory and record stock movements
+  // Decrement product inventory (allows negative stock for backorders)
   const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   for (const item of newSale.items) {
     const pIdx = products.findIndex((p) => p.id === item.product_id);
     if (pIdx !== -1) {
       const prod = products[pIdx];
-      const newStock = Math.max(0, (prod.current_stock || 0) - item.quantity);
+      const currentStock = Number(prod.current_stock ?? 0);
+      const newStock = currentStock - Number(item.quantity || 0);
       products[pIdx].current_stock = newStock;
+
+      if (isSupabaseConfigured() && supabase) {
+        await supabase
+          .from('products')
+          .update({ current_stock: newStock })
+          .eq('id', prod.id);
+      }
 
       await recordStockMovement({
         product_id: prod.id,
@@ -490,14 +602,29 @@ export async function recordSale(saleData: Omit<Sale, 'id' | 'created_at'>): Pro
         movement_type: 'SALE',
         reference_id: newSale.id,
         reference_type: 'SALE',
-        quantity_changed: -item.quantity,
-        cost_per_unit: item.unit_cost,
+        quantity_changed: -Number(item.quantity || 0),
+        cost_per_unit: Number(item.unit_cost || 0),
         resulting_stock: newStock,
         notes: `Sold via ${newSale.platform} (${newSale.order_number})`,
       });
     }
   }
   setItem(STORAGE_KEYS.PRODUCTS, products);
+
+  if (isSupabaseConfigured() && supabase) {
+    const { items, total_selling_expenses, ...dbSale } = newSale as any;
+    const { data } = await supabase.from('sales').insert([dbSale]).select().single();
+    if (data && newSale.items && newSale.items.length > 0) {
+      const itemsPayload = newSale.items.map((i) => ({
+        sale_id: data.id,
+        product_id: i.product_id,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        unit_cost: i.unit_cost,
+      }));
+      await supabase.from('sale_items').insert(itemsPayload);
+    }
+  }
 
   return newSale;
 }
@@ -513,7 +640,7 @@ export async function processSaleRefund(
   if (sIdx === -1) return null;
 
   const sale = sales[sIdx];
-  const updatedRefund = Math.min(sale.total_revenue, (sale.refund_amount || 0) + refundAmount);
+  const updatedRefund = Math.min(sale.total_revenue, (Number(sale.refund_amount) || 0) + Number(refundAmount));
 
   const updatedSale: Sale = {
     ...sale,
@@ -524,7 +651,8 @@ export async function processSaleRefund(
   };
 
   if (isSupabaseConfigured() && supabase) {
-    await supabase.from('sales').update(updatedSale).eq('id', saleId);
+    const { items, total_selling_expenses, ...dbSale } = updatedSale as any;
+    await supabase.from('sales').update(dbSale).eq('id', saleId);
   }
 
   sales[sIdx] = updatedSale;
@@ -537,11 +665,18 @@ export async function processSaleRefund(
       const pIdx = products.findIndex((p) => p.id === item.product_id);
       if (pIdx !== -1) {
         const prod = products[pIdx];
-        const newStock = (prod.current_stock || 0) + item.quantity;
-        const newReturned = (prod.returned_qty || 0) + item.quantity;
+        const newStock = Number(prod.current_stock ?? 0) + Number(item.quantity || 0);
+        const newReturned = (Number(prod.returned_qty) || 0) + Number(item.quantity || 0);
 
         products[pIdx].current_stock = newStock;
         products[pIdx].returned_qty = newReturned;
+
+        if (isSupabaseConfigured() && supabase) {
+          await supabase
+            .from('products')
+            .update({ current_stock: newStock, returned_qty: newReturned })
+            .eq('id', prod.id);
+        }
 
         await recordStockMovement({
           product_id: prod.id,
@@ -549,8 +684,8 @@ export async function processSaleRefund(
           movement_type: 'RETURN',
           reference_id: sale.id,
           reference_type: 'SALE',
-          quantity_changed: item.quantity,
-          cost_per_unit: item.unit_cost,
+          quantity_changed: Number(item.quantity || 0),
+          cost_per_unit: Number(item.unit_cost || 0),
           resulting_stock: newStock,
           notes: `Physically Restocked from Sale Refund ${sale.order_number}: ${reason}`,
         });
@@ -563,6 +698,9 @@ export async function processSaleRefund(
 }
 
 export async function deleteSale(id: string): Promise<boolean> {
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('sales').delete().eq('id', id);
+  }
   const sales = getItem<Sale[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
   const filtered = sales.filter((s) => s.id !== id);
   setItem(STORAGE_KEYS.SALES, filtered);
@@ -575,15 +713,19 @@ export async function deleteSale(id: string): Promise<boolean> {
 export async function getExpenses(): Promise<Expense[]> {
   if (isSupabaseConfigured() && supabase) {
     const { data, error } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-    if (!error && data) return data;
+    if (!error && data) {
+      return data.map((e: any) => ({ ...e, amount: Number(e.amount || 0) }));
+    }
   }
   initLocalStorage();
-  return getItem<Expense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+  const raw = getItem<Expense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+  return raw.map((e) => ({ ...e, amount: Number(e.amount || 0) }));
 }
 
 export async function recordExpense(expenseData: Omit<Expense, 'id' | 'created_at'>): Promise<Expense> {
   const newExpense: Expense = {
     ...expenseData,
+    amount: Number(expenseData.amount || 0),
     id: `exp-${Date.now()}`,
     created_at: new Date().toISOString(),
   };
@@ -600,6 +742,9 @@ export async function recordExpense(expenseData: Omit<Expense, 'id' | 'created_a
 }
 
 export async function deleteExpense(id: string): Promise<boolean> {
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('expenses').delete().eq('id', id);
+  }
   const expenses = getItem<Expense[]>(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
   const filtered = expenses.filter((e) => e.id !== id);
   setItem(STORAGE_KEYS.EXPENSES, filtered);

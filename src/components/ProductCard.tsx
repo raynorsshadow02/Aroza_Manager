@@ -12,11 +12,12 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, onSelect, onRecordSale }: ProductCardProps) {
-  const stockStatus = getStockStatus(product.current_stock, product.min_reorder_level || 5);
+  const stock = Number(product.current_stock ?? 0);
+  const stockStatus = getStockStatus(stock, product.min_reorder_level || 5);
   const mainImage = product.images && product.images.length > 0 ? product.images[0].image_url : null;
 
-  const cost = product.purchase_price_default || 0;
-  const price = product.selling_price_default || 0;
+  const cost = Number(product.purchase_price_default || 0);
+  const price = Number(product.selling_price_default || 0);
   const profitPerUnit = Math.max(0, price - cost);
   const marginPercent = price > 0 ? ((profitPerUnit / price) * 100).toFixed(0) : '0';
 
