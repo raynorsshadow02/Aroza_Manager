@@ -419,8 +419,8 @@ export const INITIAL_SETTINGS: Settings = {
   business_name: 'Aroza Collectibles',
   currency: '₹',
   default_platform: 'Instagram',
-  default_packaging_cost: 12.0,
-  default_shipping_cost: 50.0,
+  default_packaging_cost: 0.0,
+  default_shipping_cost: 0.0,
   low_stock_threshold: 5,
   theme_preference: 'warm',
 };

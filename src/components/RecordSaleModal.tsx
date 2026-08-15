@@ -41,10 +41,10 @@ export default function RecordSaleModal({
   const [quantity, setQuantity] = useState<number>(1);
   const [unitPrice, setUnitPrice] = useState<number>(0);
   const [unitCost, setUnitCost] = useState<number>(0);
-  const [shippingCharged, setShippingCharged] = useState<number>(50);
-  const [shippingCost, setShippingCost] = useState<number>(45);
+  const [shippingCharged, setShippingCharged] = useState<number>(0);
+  const [shippingCost, setShippingCost] = useState<number>(0);
   const [platformFee, setPlatformFee] = useState<number>(0);
-  const [packagingCost, setPackagingCost] = useState<number>(12);
+  const [packagingCost, setPackagingCost] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [otherExpense, setOtherExpense] = useState<number>(0);
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Paid');
@@ -96,20 +96,11 @@ export default function RecordSaleModal({
       if (platform === 'Instagram' && selectedProduct.instagram_price) {
         price = Number(selectedProduct.instagram_price);
       }
-      if (platform === 'Meesho') {
-        if (selectedProduct.meesho_price) price = Number(selectedProduct.meesho_price);
-        setPlatformFee(Math.round(price * 0.12));
-        setShippingCharged(0);
-        setShippingCost(0);
-      } else {
-        setPlatformFee(0);
-        setShippingCharged(50);
-        setShippingCost(45);
+      if (platform === 'Meesho' && selectedProduct.meesho_price) {
+        price = Number(selectedProduct.meesho_price);
       }
       if (platform === 'Direct' && selectedProduct.direct_price) {
         price = Number(selectedProduct.direct_price);
-        setShippingCharged(0);
-        setShippingCost(0);
       }
       setUnitPrice(price);
     }

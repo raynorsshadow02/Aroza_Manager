@@ -39,12 +39,12 @@ export default function SimpleSaleModal({
   const [unitPrice, setUnitPrice] = useState<number>(199);
   const [platform, setPlatform] = useState<Platform>('Instagram');
 
-  // Advanced Collapsible
+  // Advanced Collapsible (defaults to 0 for simple, manual-only expense accounting)
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [shippingCharged, setShippingCharged] = useState<number>(50);
-  const [shippingCost, setShippingCost] = useState<number>(45);
+  const [shippingCharged, setShippingCharged] = useState<number>(0);
+  const [shippingCost, setShippingCost] = useState<number>(0);
   const [platformFee, setPlatformFee] = useState<number>(0);
-  const [packagingCost, setPackagingCost] = useState<number>(12);
+  const [packagingCost, setPackagingCost] = useState<number>(0);
   const [customerName, setCustomerName] = useState<string>('');
   const [allowBackorder, setAllowBackorder] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -86,24 +86,15 @@ export default function SimpleSaleModal({
 
   useEffect(() => {
     if (selectedProduct) {
-      let price = Number(selectedProduct.selling_price_default || 199);
+      let price = Number(selectedProduct.selling_price_default || 0);
       if (platform === 'Instagram' && selectedProduct.instagram_price) {
         price = Number(selectedProduct.instagram_price);
       }
-      if (platform === 'Meesho') {
-        if (selectedProduct.meesho_price) price = Number(selectedProduct.meesho_price);
-        setPlatformFee(Math.round(price * 0.12));
-        setShippingCharged(0);
-        setShippingCost(0);
-      } else {
-        setPlatformFee(0);
-        setShippingCharged(50);
-        setShippingCost(45);
+      if (platform === 'Meesho' && selectedProduct.meesho_price) {
+        price = Number(selectedProduct.meesho_price);
       }
       if (platform === 'Direct' && selectedProduct.direct_price) {
         price = Number(selectedProduct.direct_price);
-        setShippingCharged(0);
-        setShippingCost(0);
       }
       setUnitPrice(price);
     }
@@ -111,8 +102,8 @@ export default function SimpleSaleModal({
 
   if (!isOpen) return null;
 
-  const unitCost = Number(selectedProduct?.purchase_price_default || 40);
-  const totalRevenue = (Number(quantity) * Number(unitPrice)) + (platform === 'Meesho' ? 0 : Number(shippingCharged));
+  const unitCost = Number(selectedProduct?.purchase_price_default || 0);
+  const totalRevenue = (Number(quantity) * Number(unitPrice)) + Number(shippingCharged);
   const cogs = Number(quantity) * unitCost;
   const totalExpenses = Number(shippingCost) + Number(platformFee) + Number(packagingCost);
   const netProfit = totalRevenue - cogs - totalExpenses;
