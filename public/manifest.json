@@ -1,0 +1,22 @@
+{
+  "short_name": "Aroza",
+  "name": "Aroza Manager - Inventory & Business Companion",
+  "description": "Visual personal inventory and business management system for Aroza Collectibles",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FAF7F2",
+  "theme_color": "#FAF7F2",
+  "display": "standalone",
+  "orientation": "portrait"
+}
