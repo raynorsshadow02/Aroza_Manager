@@ -103,9 +103,16 @@ export default function Home() {
     loadData();
 
     // Register Service Worker for PWA
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.log('ServiceWorker registration failed: ', err);
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js', { scope: '/' })
+          .then((reg) => {
+            console.log('Aroza PWA ServiceWorker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('PWA ServiceWorker registration failed: ', err);
+          });
       });
     }
 
@@ -158,9 +165,11 @@ export default function Home() {
         {/* Mobile Header Bar */}
         <header className="lg:hidden sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-[#E8E2D9] px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#9E5827] text-white flex items-center justify-center font-bold text-base">
-              A
-            </div>
+            <img
+              src="/logo.png"
+              alt="Aroza Collectibles"
+              className="w-8 h-8 rounded-lg object-contain bg-black p-0.5 border border-[#E8E2D9]"
+            />
             <div>
               <span className="font-bold text-sm text-[#2D241E]">Aroza Manager</span>
               <span className="text-[10px] text-[#6E6359] block font-medium">Aroza Collectibles</span>

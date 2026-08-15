@@ -44,9 +44,11 @@ export default function Sidebar({
       {/* Brand Header */}
       <div className="p-5 border-b border-[#E8E2D9] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#9E5827] flex items-center justify-center text-white shadow-xs font-serif text-lg font-bold">
-            A
-          </div>
+          <img
+            src="/logo.png"
+            alt="Aroza Collectibles"
+            className="w-9 h-9 rounded-xl object-contain bg-black p-0.5 border border-[#E8E2D9]"
+          />
           <div>
             <h1 className="font-semibold text-base tracking-tight text-[#2D241E]">Aroza Manager</h1>
             <p className="text-xs text-[#6E6359] font-medium flex items-center gap-1">

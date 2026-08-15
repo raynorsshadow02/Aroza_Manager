@@ -5,12 +5,15 @@ import { Settings, Platform } from '@/types';
 import { getSettings, saveSettings, initLocalStorage } from '@/lib/data-service';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { Settings as SettingsIcon, Database, RefreshCw, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { resetAllBusinessData } from '@/lib/api';
 
 interface SettingsViewProps {
   onRefreshAll: () => void;
 }
 
 export default function SettingsView({ onRefreshAll }: SettingsViewProps) {
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
   const [settings, setSettingsData] = useState<Settings>({
     business_name: 'Aroza Collectibles',
     currency: '₹',
@@ -188,6 +191,72 @@ export default function SettingsView({ onRefreshAll }: SettingsViewProps) {
           <RefreshCw className="w-4 h-4" /> Reset & Re-Seed Demo Data
         </button>
       </div>
+        {/* Reset Business Data */}
+        <div className="aroza-card p-6 space-y-3 bg-white mt-6">
+          <h3 className="font-bold text-sm text-[#9E5827] flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-[#9E5827]" /> Reset Business Data
+          </h3>
+          <p className="text-xs text-[#6E6359]">
+            Delete all products, purchases, sales, expenses, stock history and uploaded business files. Your account and application settings will remain.
+          </p>
+          <button
+            onClick={() => setShowResetModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs"
+          >
+            Reset All Business Data
+          </button>
+        </div>
+        {showResetModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-lg">
+              <h3 className="text-lg font-bold mb-2">Reset Aroza Manager?</h3>
+              <p className="text-sm text-[#6E6359] mb-4">This will permanently delete all your business data.</p>
+              <ul className="list-disc list-inside mb-4 text-sm text-[#6E6359]">
+                <li>Products</li>
+                <li>Purchases</li>
+                <li>Sales</li>
+                <li>Expenses</li>
+                <li>Stock history</li>
+                <li>Receipts</li>
+                <li>Invoices</li>
+                <li>Product images</li>
+              </ul>
+              <p className="text-xs text-red-600 mb-2">⚠ This permanently deletes your Aroza business records.</p>
+              <input
+                type="text"
+                placeholder="Type RESET to confirm"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                className="w-full mb-4 px-3 py-2 border border-[#E8E2D9] rounded-xl"
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => { setShowResetModal(false); setResetConfirmText(''); }}
+                  className="px-4 py-2 rounded-xl bg-gray-200 text-gray-800 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await resetAllBusinessData();
+                      alert('All business data has been reset.');
+                      onRefreshAll();
+                    } catch (e) {
+                      alert('Reset failed: ' + (e as Error).message);
+                    }
+                    setShowResetModal(false);
+                    setResetConfirmText('');
+                  }}
+                  disabled={resetConfirmText !== 'RESET'}
+                  className="px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Reset Everything
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

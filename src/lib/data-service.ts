@@ -60,6 +60,10 @@ function setItem<T>(key: string, val: T): void {
 export function initLocalStorage(forceReset: boolean = false): void {
   if (typeof window === 'undefined') return;
 
+  // Only seed sample data when explicitly allowed (development mode or SEED_DATA env flag)
+  const allowSeed = process.env.NEXT_PUBLIC_ENABLE_SEED === 'true' || process.env.NODE_ENV === 'development';
+  if (!allowSeed && !forceReset) return;
+
   if (forceReset || !localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
     setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     setItem(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
@@ -71,6 +75,19 @@ export function initLocalStorage(forceReset: boolean = false): void {
     setItem(STORAGE_KEYS.RECONCILIATIONS, []);
     setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
   }
+}
+
+// Clear all local data on reset
+export function clearAllLocalStorage(): void {
+  if (typeof window === 'undefined') return;
+  setItem(STORAGE_KEYS.PRODUCTS, []);
+  setItem(STORAGE_KEYS.PURCHASES, []);
+  setItem(STORAGE_KEYS.SALES, []);
+  setItem(STORAGE_KEYS.EXPENSES, []);
+  setItem(STORAGE_KEYS.SUPPLIERS, []);
+  setItem(STORAGE_KEYS.CATEGORIES, []);
+  setItem(STORAGE_KEYS.MOVEMENTS, []);
+  setItem(STORAGE_KEYS.RECONCILIATIONS, []);
 }
 
 // ==========================================
