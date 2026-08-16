@@ -4,19 +4,23 @@ import React, { useState } from 'react';
 import { Purchase, Product, Supplier } from '@/types';
 import { formatCurrency } from '@/lib/calculations';
 import { deletePurchase } from '@/lib/data-service';
-import { Truck, Plus, Trash2, Calendar, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Truck, Plus, Trash2, Calendar, FileText, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 
 interface PurchasesViewProps {
   purchases: Purchase[];
   products: Product[];
   suppliers: Supplier[];
   onOpenRecordPurchase: () => void;
+  onEditPurchase?: (purchase: Purchase) => void;
   onRefresh: () => void;
 }
 
 export default function PurchasesView({
   purchases,
+  products,
+  suppliers,
   onOpenRecordPurchase,
+  onEditPurchase,
   onRefresh,
 }: PurchasesViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -102,6 +106,16 @@ export default function PurchasesView({
                       </span>
                     </div>
 
+                    {onEditPurchase && (
+                      <button
+                        onClick={() => onEditPurchase(purchase)}
+                        className="p-2 text-[#9E5827] hover:bg-[#FAF7F2] rounded-xl border border-[#E8E2D9] flex items-center gap-1 text-xs font-semibold"
+                        title="Edit Investment Order"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Edit</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : purchase.id)}
                       className="p-2 text-[#6E6359] hover:bg-[#FAF7F2] rounded-xl border border-[#E8E2D9]"

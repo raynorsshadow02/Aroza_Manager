@@ -24,6 +24,7 @@ interface HomeViewProps {
   onOpenAction: (type: 'product' | 'sale' | 'expense' | 'purchase' | 'reconcile', prod?: Product) => void;
   onSelectProduct: (product: Product) => void;
   onNLPCommand: (command: ParsedCommand) => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 export default function HomeView({
@@ -34,6 +35,7 @@ export default function HomeView({
   onOpenAction,
   onSelectProduct,
   onNLPCommand,
+  onNavigateTab,
 }: HomeViewProps) {
   const [nlpText, setNlpText] = useState('');
   const stats = calculateDashboardStats(products, purchases, sales, expenses);
@@ -94,20 +96,32 @@ export default function HomeView({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#E8E2D9] text-xs">
-          <div>
-            <span className="text-[#6E6359] text-[10px] block">Total Sales</span>
+          <div
+            onClick={() => onNavigateTab && onNavigateTab('sales')}
+            className={`p-1.5 rounded-xl transition-colors ${onNavigateTab ? 'cursor-pointer hover:bg-white/70' : ''}`}
+          >
+            <span className="text-[#6E6359] text-[10px] block font-medium">Total Sales</span>
             <span className="font-bold text-[#2E7D32]">{formatCurrency(stats.total_revenue)}</span>
           </div>
-          <div>
-            <span className="text-[#6E6359] text-[10px] block">Inventory Value</span>
+          <div
+            onClick={() => onNavigateTab && onNavigateTab('products')}
+            className={`p-1.5 rounded-xl transition-colors ${onNavigateTab ? 'cursor-pointer hover:bg-white/70' : ''}`}
+          >
+            <span className="text-[#6E6359] text-[10px] block font-medium">Inventory Value</span>
             <span className="font-bold text-[#2D241E]">{formatCurrency(stats.current_inventory_value)}</span>
           </div>
-          <div>
-            <span className="text-[#6E6359] text-[10px] block">Investment</span>
+          <div
+            onClick={() => onNavigateTab && onNavigateTab('purchases')}
+            className={`p-1.5 rounded-xl transition-colors ${onNavigateTab ? 'cursor-pointer hover:bg-white/70' : ''}`}
+          >
+            <span className="text-[#6E6359] text-[10px] block font-medium">Total Investment</span>
             <span className="font-bold text-[#D97706]">{formatCurrency(stats.total_investment)}</span>
           </div>
-          <div>
-            <span className="text-[#6E6359] text-[10px] block">Units in Stock</span>
+          <div
+            onClick={() => onNavigateTab && onNavigateTab('products')}
+            className={`p-1.5 rounded-xl transition-colors ${onNavigateTab ? 'cursor-pointer hover:bg-white/70' : ''}`}
+          >
+            <span className="text-[#6E6359] text-[10px] block font-medium">Units in Stock</span>
             <span className="font-bold text-[#2D241E]">{stats.total_units_in_stock} units</span>
           </div>
         </div>

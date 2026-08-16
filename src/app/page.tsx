@@ -62,6 +62,7 @@ export default function Home() {
 
   const [isRecordPurchaseOpen, setIsRecordPurchaseOpen] = useState<boolean>(false);
   const [purchaseInitialProduct, setPurchaseInitialProduct] = useState<Product | null>(null);
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
 
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState<boolean>(false);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState<boolean>(false);
@@ -213,6 +214,7 @@ export default function Home() {
                   onOpenAction={(type, prod) => handleOpenQuickAction(type, prod)}
                   onSelectProduct={(p) => setSelectedProductDetail(p)}
                   onNLPCommand={(cmd) => setNlpCommand(cmd)}
+                  onNavigateTab={(t) => setActiveTab(t)}
                 />
               )}
 
@@ -246,6 +248,10 @@ export default function Home() {
                   products={products}
                   suppliers={suppliers}
                   onOpenRecordPurchase={() => handleOpenQuickAction('purchase')}
+                  onEditPurchase={(p) => {
+                    setEditingPurchase(p);
+                    setIsRecordPurchaseOpen(true);
+                  }}
                   onRefresh={loadData}
                 />
               )}
@@ -348,10 +354,12 @@ export default function Home() {
         onClose={() => {
           setIsRecordPurchaseOpen(false);
           setPurchaseInitialProduct(null);
+          setEditingPurchase(null);
         }}
         products={products}
         suppliers={suppliers}
         initialProduct={purchaseInitialProduct}
+        editingPurchase={editingPurchase}
         onSaveSuccess={loadData}
       />
 

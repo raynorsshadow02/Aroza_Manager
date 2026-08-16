@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Product, Supplier, Purchase, PurchaseItem } from '@/types';
-import { recordPurchase } from '@/lib/data-service';
+import { recordPurchase, updatePurchase } from '@/lib/data-service';
 import { formatCurrency } from '@/lib/calculations';
 import { X, Truck, Plus, Trash2, Upload, FileText } from 'lucide-react';
 
@@ -12,6 +12,7 @@ interface RecordPurchaseModalProps {
   products: Product[];
   suppliers: Supplier[];
   initialProduct?: Product | null;
+  editingPurchase?: Purchase | null;
   onSaveSuccess: () => void;
 }
 
@@ -21,13 +22,14 @@ export default function RecordPurchaseModal({
   products,
   suppliers,
   initialProduct,
+  editingPurchase,
   onSaveSuccess,
 }: RecordPurchaseModalProps) {
   const [supplierId, setSupplierId] = useState<string>('');
   const [purchaseDate, setPurchaseDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [purchaseNumber, setPurchaseNumber] = useState<string>('');
-  const [transportCost, setTransportCost] = useState<number>(200);
-  const [packagingCost, setPackagingCost] = useState<number>(100);
+  const [transportCost, setTransportCost] = useState<number>(0);
+  const [packagingCost, setPackagingCost] = useState<number>(0);
   const [otherExpenses, setOtherExpenses] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('UPI');
   const [notes, setNotes] = useState<string>('');
@@ -36,33 +38,54 @@ export default function RecordPurchaseModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
-    setPurchaseNumber(`PUR-#${Math.floor(100 + Math.random() * 900)}`);
-    if (suppliers.length > 0 && !supplierId) {
-      setSupplierId(suppliers[0].id);
-    }
+    if (editingPurchase) {
+      setPurchaseNumber(editingPurchase.purchase_number);
+      setSupplierId(editingPurchase.supplier_id || (suppliers[0]?.id ?? ''));
+      setPurchaseDate(editingPurchase.purchase_date);
+      setTransportCost(editingPurchase.transport_cost || 0);
+      setPackagingCost(editingPurchase.packaging_cost || 0);
+      setOtherExpenses(editingPurchase.other_expenses || 0);
+      setPaymentMethod(editingPurchase.payment_method || 'UPI');
+      setNotes(editingPurchase.notes || '');
+      setInvoiceUrl(editingPurchase.invoice_url || '');
+      setItems(
+        (editingPurchase.items || []).map((i) => ({
+          product_id: i.product_id,
+          product_name: i.product_name || '',
+          quantity: Number(i.quantity || 1),
+          unit_cost: Number(i.unit_cost || 0),
+          total_cost: Number(i.total_cost || Number(i.quantity || 1) * Number(i.unit_cost || 0)),
+        }))
+      );
+    } else {
+      setPurchaseNumber(`PUR-#${Math.floor(100 + Math.random() * 900)}`);
+      if (suppliers.length > 0 && !supplierId) {
+        setSupplierId(suppliers[0].id);
+      }
 
-    if (initialProduct) {
-      setItems([
-        {
-          product_id: initialProduct.id,
-          product_name: initialProduct.name,
-          quantity: 20,
-          unit_cost: initialProduct.purchase_price_default || 40,
-          total_cost: 20 * (initialProduct.purchase_price_default || 40),
-        },
-      ]);
-    } else if (products.length > 0 && items.length === 0) {
-      setItems([
-        {
-          product_id: products[0].id,
-          product_name: products[0].name,
-          quantity: 20,
-          unit_cost: products[0].purchase_price_default || 40,
-          total_cost: 20 * (products[0].purchase_price_default || 40),
-        },
-      ]);
+      if (initialProduct) {
+        setItems([
+          {
+            product_id: initialProduct.id,
+            product_name: initialProduct.name,
+            quantity: 20,
+            unit_cost: initialProduct.purchase_price_default || 40,
+            total_cost: 20 * (initialProduct.purchase_price_default || 40),
+          },
+        ]);
+      } else if (products.length > 0 && items.length === 0) {
+        setItems([
+          {
+            product_id: products[0].id,
+            product_name: products[0].name,
+            quantity: 20,
+            unit_cost: products[0].purchase_price_default || 40,
+            total_cost: 20 * (products[0].purchase_price_default || 40),
+          },
+        ]);
+      }
     }
-  }, [suppliers, products, initialProduct, isOpen]);
+  }, [suppliers, products, initialProduct, editingPurchase, isOpen]);
 
   if (!isOpen) return null;
 
@@ -119,20 +142,38 @@ export default function RecordPurchaseModal({
 
     setIsSubmitting(true);
 
-    await recordPurchase({
-      purchase_number: purchaseNumber || `PUR-#${Date.now().toString().slice(-4)}`,
-      supplier_id: supplierId,
-      supplier_name: selectedSupplier?.name || '',
-      purchase_date: purchaseDate,
-      transport_cost: Number(transportCost) || 0,
-      packaging_cost: Number(packagingCost) || 0,
-      other_expenses: Number(otherExpenses) || 0,
-      payment_method: paymentMethod,
-      notes,
-      invoice_url: invoiceUrl,
-      total_amount: grandTotal,
-      items,
-    });
+    if (editingPurchase?.id) {
+      await updatePurchase({
+        ...editingPurchase,
+        purchase_number: purchaseNumber || editingPurchase.purchase_number,
+        supplier_id: supplierId,
+        supplier_name: selectedSupplier?.name || editingPurchase.supplier_name || '',
+        purchase_date: purchaseDate,
+        transport_cost: Number(transportCost) || 0,
+        packaging_cost: Number(packagingCost) || 0,
+        other_expenses: Number(otherExpenses) || 0,
+        payment_method: paymentMethod,
+        notes,
+        invoice_url: invoiceUrl,
+        total_amount: grandTotal,
+        items,
+      });
+    } else {
+      await recordPurchase({
+        purchase_number: purchaseNumber || `PUR-#${Date.now().toString().slice(-4)}`,
+        supplier_id: supplierId,
+        supplier_name: selectedSupplier?.name || '',
+        purchase_date: purchaseDate,
+        transport_cost: Number(transportCost) || 0,
+        packaging_cost: Number(packagingCost) || 0,
+        other_expenses: Number(otherExpenses) || 0,
+        payment_method: paymentMethod,
+        notes,
+        invoice_url: invoiceUrl,
+        total_amount: grandTotal,
+        items,
+      });
+    }
 
     setIsSubmitting(false);
     onSaveSuccess();
@@ -149,8 +190,14 @@ export default function RecordPurchaseModal({
               <Truck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base lg:text-lg font-bold text-[#78350F]">Record Supplier Purchase</h2>
-              <p className="text-xs text-[#92400E]">Stock Investment & Ledger Inventory Addition</p>
+              <h2 className="text-base lg:text-lg font-bold text-[#78350F]">
+                {editingPurchase ? 'Edit Investment / Purchase Order' : 'Record Supplier Purchase'}
+              </h2>
+              <p className="text-xs text-[#92400E]">
+                {editingPurchase
+                  ? 'Update unit costs, quantities, and supplier investment spend'
+                  : 'Stock Investment & Ledger Inventory Addition'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#78350F] hover:bg-white/60 rounded-xl">

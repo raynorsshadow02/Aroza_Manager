@@ -601,6 +601,46 @@ export async function recordPurchase(purchaseData: Omit<Purchase, 'id' | 'create
   return newPurchase;
 }
 
+export async function updatePurchase(purchase: Purchase): Promise<Purchase> {
+  const purchases = getItem<Purchase[]>(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
+  const idx = purchases.findIndex((p) => p.id === purchase.id);
+  if (idx !== -1) {
+    const oldPurchase = purchases[idx];
+    const updatedPurchase: Purchase = {
+      ...oldPurchase,
+      ...purchase,
+      total_amount: Number(purchase.total_amount || 0),
+    };
+    purchases[idx] = updatedPurchase;
+    setItem(STORAGE_KEYS.PURCHASES, purchases);
+
+    // Update product current_stock with difference between old and new item quantities
+    const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    for (const newItem of updatedPurchase.items || []) {
+      const oldItem = (oldPurchase.items || []).find((i) => i.product_id === newItem.product_id);
+      const oldQty = oldItem ? Number(oldItem.quantity || 0) : 0;
+      const newQty = Number(newItem.quantity || 0);
+      const deltaQty = newQty - oldQty;
+
+      const pIdx = products.findIndex((p) => p.id === newItem.product_id);
+      if (pIdx !== -1) {
+        products[pIdx].current_stock = Math.max(0, Number(products[pIdx].current_stock || 0) + deltaQty);
+        if (newItem.unit_cost) {
+          products[pIdx].purchase_price_default = Number(newItem.unit_cost);
+        }
+      }
+    }
+    setItem(STORAGE_KEYS.PRODUCTS, products);
+
+    if (isSupabaseConfigured() && supabase) {
+      const { items, ...dbPurchase } = updatedPurchase as any;
+      await supabase.from('purchases').update(dbPurchase).eq('id', purchase.id);
+    }
+    return updatedPurchase;
+  }
+  return purchase;
+}
+
 export async function deletePurchase(id: string): Promise<boolean> {
   if (isSupabaseConfigured() && supabase) {
     await supabase.from('purchases').delete().eq('id', id);
