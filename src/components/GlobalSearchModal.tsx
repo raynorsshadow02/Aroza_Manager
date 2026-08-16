@@ -46,6 +46,8 @@ export default function GlobalSearchModal({
           p.name.toLowerCase().includes(cleanQuery) ||
           p.sku.toLowerCase().includes(cleanQuery) ||
           (p.category_name && p.category_name.toLowerCase().includes(cleanQuery)) ||
+          (p.subcategory && p.subcategory.toLowerCase().includes(cleanQuery)) ||
+          (p.brand && p.brand.toLowerCase().includes(cleanQuery)) ||
           (p.tags && p.tags.some((t) => t.toLowerCase().includes(cleanQuery)))
       ).slice(0, 5)
     : [];

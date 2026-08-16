@@ -121,6 +121,34 @@ export async function addCategory(category: Partial<Category>): Promise<Category
   return newCat;
 }
 
+export async function deleteCategory(idOrName: string): Promise<boolean> {
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('categories').delete().or(`id.eq.${idOrName},name.eq.${idOrName}`);
+  }
+
+  const categories = getItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+  const filtered = categories.filter(
+    (c) => c.id !== idOrName && c.name.toLowerCase() !== idOrName.toLowerCase()
+  );
+  setItem(STORAGE_KEYS.CATEGORIES, filtered);
+
+  // Also update products using this category to default 'Collectible'
+  const products = getItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  let updated = false;
+  const newProducts = products.map((p) => {
+    if (p.category_id === idOrName || p.category_name?.toLowerCase() === idOrName.toLowerCase()) {
+      updated = true;
+      return { ...p, category_id: undefined, category_name: 'Collectible' };
+    }
+    return p;
+  });
+  if (updated) {
+    setItem(STORAGE_KEYS.PRODUCTS, newProducts);
+  }
+
+  return true;
+}
+
 // ==========================================
 // SUPPLIERS SERVICE
 // ==========================================
@@ -169,6 +197,17 @@ export async function saveSupplier(supplier: Partial<Supplier>): Promise<Supplie
   suppliers.push(newSupplier);
   setItem(STORAGE_KEYS.SUPPLIERS, suppliers);
   return newSupplier;
+}
+
+export async function deleteSupplier(id: string): Promise<boolean> {
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('suppliers').delete().eq('id', id);
+  }
+
+  const suppliers = getItem<Supplier[]>(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
+  const filtered = suppliers.filter((s) => s.id !== id);
+  setItem(STORAGE_KEYS.SUPPLIERS, filtered);
+  return true;
 }
 
 // ==========================================

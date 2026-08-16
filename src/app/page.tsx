@@ -22,6 +22,7 @@ import RecordPurchaseModal from '@/components/RecordPurchaseModal';
 import AddSupplierModal from '@/components/AddSupplierModal';
 import ReconciliationModal from '@/components/ReconciliationModal';
 import NLPConfirmModal from '@/components/NLPConfirmModal';
+import ManageCategoriesModal from '@/components/ManageCategoriesModal';
 
 import { ParsedCommand } from '@/lib/nlp-parser';
 import { Product, Purchase, Sale, Expense, Supplier, Category } from '@/types';
@@ -65,6 +66,7 @@ export default function Home() {
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState<boolean>(false);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState<boolean>(false);
   const [isReconcileOpen, setIsReconcileOpen] = useState<boolean>(false);
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState<boolean>(false);
 
   const [nlpCommand, setNlpCommand] = useState<ParsedCommand | null>(null);
 
@@ -222,6 +224,7 @@ export default function Home() {
                   onSelectProduct={(p) => setSelectedProductDetail(p)}
                   onOpenAddProduct={() => handleOpenQuickAction('product')}
                   onRecordSale={(p) => handleOpenQuickAction('sale', p)}
+                  onOpenManageCategories={() => setIsManageCategoriesOpen(true)}
                 />
               )}
 
@@ -252,6 +255,7 @@ export default function Home() {
                   suppliers={suppliers}
                   purchases={purchases}
                   onOpenAddSupplier={() => handleOpenQuickAction('supplier')}
+                  onRefresh={loadData}
                 />
               )}
 
@@ -312,9 +316,11 @@ export default function Home() {
         }}
         categories={categories}
         suppliers={suppliers}
+        products={products}
         editingProduct={editingProduct}
         onSaveSuccess={loadData}
         onSelectExistingProduct={(p) => handleOpenQuickAction('purchase', p)}
+        onOpenManageCategories={() => setIsManageCategoriesOpen(true)}
       />
 
       {/* Simple Record Sale Modal */}
@@ -354,6 +360,15 @@ export default function Home() {
         isOpen={isAddSupplierOpen}
         onClose={() => setIsAddSupplierOpen(false)}
         onSaveSuccess={loadData}
+      />
+
+      {/* Manage Categories Modal */}
+      <ManageCategoriesModal
+        isOpen={isManageCategoriesOpen}
+        onClose={() => setIsManageCategoriesOpen(false)}
+        categories={categories}
+        products={products}
+        onRefresh={loadData}
       />
 
       {/* Reconciliation Modal */}

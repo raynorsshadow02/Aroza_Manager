@@ -64,11 +64,14 @@ export default function RecordSaleModal({
   // Filter products
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
+      const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
-        searchQuery.trim() === '' ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.brand && p.brand.toLowerCase().includes(searchQuery.toLowerCase()));
+        q === '' ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.category_name && p.category_name.toLowerCase().includes(q)) ||
+        (p.subcategory && p.subcategory.toLowerCase().includes(q)) ||
+        (p.brand && p.brand.toLowerCase().includes(q));
       const matchesCategory =
         selectedCategory === 'all' || p.category_name === selectedCategory;
       return matchesSearch && matchesCategory;

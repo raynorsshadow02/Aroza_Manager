@@ -13,6 +13,7 @@ interface ProductsViewProps {
   onSelectProduct: (product: Product) => void;
   onOpenAddProduct: () => void;
   onRecordSale: (product: Product) => void;
+  onOpenManageCategories?: () => void;
 }
 
 export default function ProductsView({
@@ -22,27 +23,65 @@ export default function ProductsView({
   onSelectProduct,
   onOpenAddProduct,
   onRecordSale,
+  onOpenManageCategories,
 }: ProductsViewProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
   const [selectedStockStatus, setSelectedStockStatus] = useState<string>('all');
 
+  // Compute all unique category names (combining registered categories + any custom category on products)
+  const allCategoryNames = React.useMemo(() => {
+    const set = new Set<string>();
+    categories.forEach((c) => {
+      if (c.name) set.add(c.name.trim());
+    });
+    products.forEach((p) => {
+      if (p.category_name) set.add(p.category_name.trim());
+    });
+    return Array.from(set).sort();
+  }, [categories, products]);
+
+  // Compute all unique subcategory names
+  const allSubcategories = React.useMemo(() => {
+    const set = new Set<string>(['Rubbers', 'Metal Keychains', 'Weapon Keychains']);
+    products.forEach((p) => {
+      if (p.subcategory && p.subcategory.trim()) {
+        set.add(p.subcategory.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
   // Filtering Logic
   const filteredProducts = products.filter((p) => {
+    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.tags && p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())));
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.category_name && p.category_name.toLowerCase().includes(q)) ||
+      (p.subcategory && p.subcategory.toLowerCase().includes(q)) ||
+      (p.brand && p.brand.toLowerCase().includes(q)) ||
+      (p.tags && p.tags.some((t) => t.toLowerCase().includes(q)));
 
-    const matchesCategory = selectedCategory === 'all' || p.category_id === selectedCategory;
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      p.category_id === selectedCategory ||
+      (p.category_name && p.category_name.toLowerCase() === selectedCategory.toLowerCase());
+
+    const matchesSubcategory =
+      selectedSubcategory === 'all' ||
+      (p.subcategory && p.subcategory.toLowerCase() === selectedSubcategory.toLowerCase());
+
     const matchesSupplier = selectedSupplier === 'all' || p.supplier_id === selectedSupplier;
 
     const status = getStockStatus(p.current_stock, p.min_reorder_level || 5);
     const matchesStock = selectedStockStatus === 'all' || status === selectedStockStatus;
 
-    return matchesSearch && matchesCategory && matchesSupplier && matchesStock;
+    return matchesSearch && matchesCategory && matchesSubcategory && matchesSupplier && matchesStock;
   });
 
   return (
@@ -58,12 +97,23 @@ export default function ProductsView({
           </p>
         </div>
 
-        <button
-          onClick={onOpenAddProduct}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#9E5827] text-white hover:bg-[#86481E] font-bold text-xs shadow-xs transition-transform active:scale-98"
-        >
-          <Plus className="w-4 h-4" /> Add New Product
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenManageCategories && (
+            <button
+              onClick={onOpenManageCategories}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E8E2D9] text-[#2D241E] hover:bg-[#FAF7F2] font-bold text-xs shadow-xs transition-colors"
+            >
+              Manage Categories
+            </button>
+          )}
+
+          <button
+            onClick={onOpenAddProduct}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#9E5827] text-white hover:bg-[#86481E] font-bold text-xs shadow-xs transition-transform active:scale-98"
+          >
+            <Plus className="w-4 h-4" /> Add New Product
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -76,7 +126,7 @@ export default function ProductsView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search product name, SKU..."
+              placeholder="Search product, category, subcategory, SKU..."
               className="w-full pl-9 pr-3 py-2 text-xs bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl focus:outline-none focus:border-[#9E5827]"
             />
           </div>
@@ -107,18 +157,47 @@ export default function ProductsView({
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2 border-t border-[#E8E2D9] text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-[#E8E2D9] text-xs">
           <div>
-            <span className="text-[10px] text-[#6E6359] block mb-0.5">Category</span>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] text-[#6E6359] block">Category</span>
+              {onOpenManageCategories && (
+                <button
+                  type="button"
+                  onClick={onOpenManageCategories}
+                  className="text-[9px] text-[#9E5827] hover:underline"
+                >
+                  Manage
+                </button>
+              )}
+            </div>
             <select
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+              }}
               className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-[#2D241E] font-medium"
             >
-              <option value="all">All Categories ({categories.length})</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              <option value="all">All Categories ({allCategoryNames.length})</option>
+              {allCategoryNames.map((name, idx) => (
+                <option key={`view-cat-${name}-${idx}`} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span className="text-[10px] text-[#6E6359] block mb-0.5">Subcategory</span>
+            <select
+              value={selectedSubcategory}
+              onChange={(e) => setSelectedSubcategory(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl text-[#2D241E] font-medium"
+            >
+              <option value="all">All Subcategories ({allSubcategories.length})</option>
+              {allSubcategories.map((sub, idx) => (
+                <option key={`view-sub-${sub}-${idx}`} value={sub}>
+                  {sub}
                 </option>
               ))}
             </select>
@@ -138,7 +217,7 @@ export default function ProductsView({
             </select>
           </div>
 
-          <div className="col-span-2 sm:col-span-1">
+          <div>
             <span className="text-[10px] text-[#6E6359] block mb-0.5">Supplier</span>
             <select
               value={selectedSupplier}
