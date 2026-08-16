@@ -35,24 +35,49 @@ const STORAGE_KEYS = {
   SETTINGS: 'aroza_settings',
 };
 
-// Storage helper functions
+// Storage helper functions with in-memory fallback and quota protection
+const memoryStorage: Record<string, any> = {};
+
 function getItem<T>(key: string, defaultVal: T): T {
   if (typeof window === 'undefined') return defaultVal;
   try {
     const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultVal;
+    if (item) {
+      const parsed = JSON.parse(item);
+      memoryStorage[key] = parsed;
+      return parsed;
+    }
   } catch (err) {
     console.error(`Error reading ${key} from localStorage:`, err);
-    return defaultVal;
   }
+  return memoryStorage[key] !== undefined ? memoryStorage[key] : defaultVal;
 }
 
 function setItem<T>(key: string, val: T): void {
   if (typeof window === 'undefined') return;
+  memoryStorage[key] = val;
   try {
     localStorage.setItem(key, JSON.stringify(val));
-  } catch (err) {
+  } catch (err: any) {
     console.error(`Error writing ${key} to localStorage:`, err);
+    // Handle QuotaExceededError by sanitizing oversized base64 images
+    if (key === STORAGE_KEYS.PRODUCTS && Array.isArray(val)) {
+      try {
+        const sanitized = (val as any[]).map((p) => ({
+          ...p,
+          images: (p.images || []).map((img: any) => ({
+            ...img,
+            image_url:
+              img.image_url && img.image_url.startsWith('data:') && img.image_url.length > 80000
+                ? 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&auto=format&fit=crop&q=80'
+                : img.image_url,
+          })),
+        }));
+        localStorage.setItem(key, JSON.stringify(sanitized));
+      } catch (innerErr) {
+        console.error('Failed fallback write to localStorage:', innerErr);
+      }
+    }
   }
 }
 

@@ -10,6 +10,47 @@ interface CameraUploaderProps {
   label?: string;
 }
 
+// Client-side image compressor: scales down high-res phone camera photos (up to 12MP) to crisp 800px thumbnails (~30KB)
+export function compressImage(file: File, maxDimension: number = 800, quality: number = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.onerror = () => {
+        resolve(e.target?.result as string);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      resolve('');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CameraUploader({
   imagePreview,
   onImageSelected,
@@ -18,17 +59,25 @@ export default function CameraUploader({
 }: CameraUploaderProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = React.useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (reader.result) {
-          onImageSelected(reader.result as string);
+      setIsProcessing(true);
+      try {
+        const compressedBase64 = await compressImage(file, 800, 0.75);
+        if (compressedBase64) {
+          onImageSelected(compressedBase64);
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Error compressing image:', err);
+      } finally {
+        setIsProcessing(false);
+        if (e.target) {
+          e.target.value = '';
+        }
+      }
     }
   };
 
@@ -53,7 +102,12 @@ export default function CameraUploader({
         className="hidden"
       />
 
-      {imagePreview ? (
+      {isProcessing ? (
+        <div className="flex items-center justify-center p-6 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D9] space-x-2 text-xs font-semibold text-[#9E5827]">
+          <div className="w-4 h-4 border-2 border-[#9E5827] border-t-transparent rounded-full animate-spin" />
+          <span>Compressing & optimizing photo...</span>
+        </div>
+      ) : imagePreview ? (
         <div className="relative aspect-4/3 rounded-2xl bg-[#F4EBE1] overflow-hidden border border-[#E8E2D9] shadow-xs">
           <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
           {onClearImage && (

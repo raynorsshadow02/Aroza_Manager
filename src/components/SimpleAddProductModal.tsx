@@ -180,32 +180,36 @@ export default function SimpleAddProductModal({
     });
 
     // 2. Automatically Record Initial Purchase Order in Background
-    if (!editingProduct && parsedQuantity > 0) {
-      await recordPurchase({
-        purchase_number: `PUR-#${Math.floor(100 + Math.random() * 900)}`,
-        supplier_name: supplierOrLocation,
-        purchase_date: new Date().toISOString().split('T')[0],
-        transport_cost: 0,
-        packaging_cost: 0,
-        other_expenses: 0,
-        payment_method: 'UPI',
-        notes: notes || `Initial purchase from ${supplierOrLocation}`,
-        total_amount: parsedQuantity * parsedPurchasePrice,
-        items: [
-          {
-            product_id: createdProduct.id,
-            product_name: createdProduct.name,
-            quantity: parsedQuantity,
-            unit_cost: parsedPurchasePrice,
-            total_cost: parsedQuantity * parsedPurchasePrice,
-          },
-        ],
-      });
+    try {
+      if (!editingProduct && parsedQuantity > 0) {
+        await recordPurchase({
+          purchase_number: `PUR-#${Math.floor(100 + Math.random() * 900)}`,
+          supplier_name: supplierOrLocation,
+          purchase_date: new Date().toISOString().split('T')[0],
+          transport_cost: 0,
+          packaging_cost: 0,
+          other_expenses: 0,
+          payment_method: 'UPI',
+          notes: notes || `Initial purchase from ${supplierOrLocation}`,
+          total_amount: parsedQuantity * parsedPurchasePrice,
+          items: [
+            {
+              product_id: createdProduct.id,
+              product_name: createdProduct.name,
+              quantity: parsedQuantity,
+              unit_cost: parsedPurchasePrice,
+              total_cost: parsedQuantity * parsedPurchasePrice,
+            },
+          ],
+        });
+      }
+    } catch (purchaseErr) {
+      console.error('Error auto-recording initial purchase:', purchaseErr);
+    } finally {
+      setIsSubmitting(false);
+      onSaveSuccess();
+      onClose();
     }
-
-    setIsSubmitting(false);
-    onSaveSuccess();
-    onClose();
   };
 
   return (
