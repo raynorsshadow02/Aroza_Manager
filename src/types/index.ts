@@ -214,6 +214,8 @@ export interface DashboardStats {
   total_profit: number;
   total_investment: number;
   current_inventory_value: number;
+  inventory_cost_value?: number;
+  potential_profit?: number;
   total_products: number;
   total_units_in_stock: number;
   units_sold: number;

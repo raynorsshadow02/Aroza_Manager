@@ -243,15 +243,24 @@ export function calculateDashboardStats(
   // 7. Net Profit
   const total_profit = roundMoney(gross_profit - total_expenses);
 
-  // 8. Total Investment (Total purchase orders)
-  const total_investment = purchases.reduce((acc, p) => roundMoney(acc + Number(p.total_amount || 0)), 0);
+  // 8. Total Investment (Total purchase costs + initial inventory cost)
+  const purchasesTotal = purchases.reduce((acc, p) => roundMoney(acc + Number(p.total_amount || 0)), 0);
 
-  // 9. Current Inventory Valuation
-  const current_inventory_value = products.reduce((acc, product) => {
+  // 9. Current Inventory Valuation (Cost vs Retail Selling Value)
+  const inventory_cost_value = products.reduce((acc, product) => {
     const stock = Number(product.current_stock ?? 0);
     const unitCost = Number(product.purchase_price_default ?? 0);
-    return roundMoney(acc + (Math.max(0, stock) * unitCost));
+    return roundMoney(acc + Math.max(0, stock) * unitCost);
   }, 0);
+
+  const current_inventory_value = products.reduce((acc, product) => {
+    const stock = Number(product.current_stock ?? 0);
+    const sellingPrice = Number(product.selling_price_default || product.purchase_price_default || 0);
+    return roundMoney(acc + Math.max(0, stock) * sellingPrice);
+  }, 0);
+
+  const total_investment = purchasesTotal > 0 ? purchasesTotal : inventory_cost_value;
+  const potential_profit = roundMoney(Math.max(0, current_inventory_value - inventory_cost_value));
 
   // 10. Counts
   const total_products = products.length;
@@ -270,6 +279,8 @@ export function calculateDashboardStats(
     total_profit,
     total_investment,
     current_inventory_value,
+    inventory_cost_value,
+    potential_profit,
     total_products,
     total_units_in_stock,
     units_sold,

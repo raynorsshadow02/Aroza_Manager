@@ -81,14 +81,38 @@ function setItem<T>(key: string, val: T): void {
   }
 }
 
+const INIT_FLAG_KEY = 'aroza_app_initialized_v2';
+
 // Seed initializer
 export function initLocalStorage(forceReset: boolean = false): void {
   if (typeof window === 'undefined') return;
 
-  const allowSeed = process.env.NEXT_PUBLIC_ENABLE_SEED === 'true' || process.env.NODE_ENV === 'development';
-  if (!allowSeed && !forceReset) return;
+  const hasInitialized = localStorage.getItem(INIT_FLAG_KEY);
 
-  if (forceReset || !localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
+  if (forceReset) {
+    setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    setItem(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
+    setItem(STORAGE_KEYS.SALES, INITIAL_SALES);
+    setItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    setItem(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
+    setItem(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    setItem(STORAGE_KEYS.MOVEMENTS, INITIAL_MOVEMENTS);
+    setItem(STORAGE_KEYS.RECONCILIATIONS, []);
+    setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
+    localStorage.setItem(INIT_FLAG_KEY, 'true');
+    return;
+  }
+
+  // If already initialized once, DO NOT OVERWRITE user data with demo data
+  if (hasInitialized) return;
+
+  const allowSeed = process.env.NEXT_PUBLIC_ENABLE_SEED === 'true' || process.env.NODE_ENV === 'development';
+  if (!allowSeed) {
+    localStorage.setItem(INIT_FLAG_KEY, 'true');
+    return;
+  }
+
+  if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
     setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     setItem(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
     setItem(STORAGE_KEYS.SALES, INITIAL_SALES);
@@ -99,6 +123,7 @@ export function initLocalStorage(forceReset: boolean = false): void {
     setItem(STORAGE_KEYS.RECONCILIATIONS, []);
     setItem(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
   }
+  localStorage.setItem(INIT_FLAG_KEY, 'true');
 }
 
 // Clear all local data on reset
@@ -112,6 +137,7 @@ export function clearAllLocalStorage(): void {
   setItem(STORAGE_KEYS.CATEGORIES, []);
   setItem(STORAGE_KEYS.MOVEMENTS, []);
   setItem(STORAGE_KEYS.RECONCILIATIONS, []);
+  localStorage.setItem(INIT_FLAG_KEY, 'true');
 }
 
 // ==========================================
