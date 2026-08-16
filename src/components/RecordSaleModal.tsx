@@ -49,7 +49,7 @@ export default function RecordSaleModal({
   const [otherExpense, setOtherExpense] = useState<number>(0);
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [notes, setNotes] = useState<string>('');
-  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(true);
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Extract unique categories
@@ -121,8 +121,8 @@ export default function RecordSaleModal({
     e.preventDefault();
     if (!selectedProduct) return;
 
-    if (isStockInsufficient && !allowNegativeStock) {
-      alert(`Cannot sell ${quantity} units! Only ${currentStock} units in stock. Check override checkbox to proceed.`);
+    if (isStockInsufficient) {
+      alert(`Cannot sell ${quantity} units! Only ${currentStock} units in stock.`);
       return;
     }
 
@@ -291,25 +291,7 @@ export default function RecordSaleModal({
           </div>
 
           {/* Insufficient Stock Alert / Backorder notice */}
-          {isStockInsufficient && (
-            <div className="p-3 bg-[#FEF3C7] border border-[#FDE68A] rounded-xl flex items-start gap-2.5 text-[#92400E]">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-[#D97706]" />
-              <div className="space-y-1">
-                <p className="font-bold text-xs">
-                  Selling {quantity} units with only {currentStock} currently in stock.
-                </p>
-                <label className="flex items-center gap-2 pt-0.5 font-semibold text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowNegativeStock}
-                    onChange={(e) => setAllowNegativeStock(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#2E7D32]"
-                  />
-                  <span>Allow Stock Override / Backorder Sale</span>
-                </label>
-              </div>
-            </div>
-          )}
+
 
           {/* Platform & Order Details */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -364,10 +346,9 @@ export default function RecordSaleModal({
               <label className="block text-[#2D241E] font-bold mb-1">Quantity Sold *</label>
               <input
                 type="number"
-                min="1"
-                required
+                min="0"
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                onChange={(e) => setQuantity(Number(e.target.value) || 0)}
                 className="w-full px-3 py-2 bg-white border border-[#E8E2D9] rounded-xl font-extrabold text-sm text-[#2D241E]"
               />
             </div>

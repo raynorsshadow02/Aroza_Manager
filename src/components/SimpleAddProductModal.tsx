@@ -69,7 +69,7 @@ export default function SimpleAddProductModal({
       setCategoryId(categories[0]?.id || '');
       setDescription('');
       setBrand('Aroza Collectibles');
-      setImagePreview('https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&auto=format&fit=crop&q=80');
+      setImagePreview(null);
     }
   }, [editingProduct, categories, isOpen]);
 
@@ -202,7 +202,7 @@ export default function SimpleAddProductModal({
                 min="1"
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
+                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
                 className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-extrabold text-sm text-[#2D241E]"
               />
             </div>
@@ -219,6 +219,21 @@ export default function SimpleAddProductModal({
               />
             </div>
           </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <label className="block text-[#2D241E] font-bold mb-1">Category *</label>
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-bold text-sm text-[#2D241E]"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -268,31 +283,7 @@ export default function SimpleAddProductModal({
             </button>
 
             {showAdvanced && (
-              <div className="p-3 mt-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-2xl space-y-3 animate-in fade-in duration-150">
-                <div>
-                  <label className="block font-semibold mb-1">Custom SKU</label>
-                  <input
-                    type="text"
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-[#E8E2D9] rounded-lg font-mono text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold mb-1">Category</label>
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-[#E8E2D9] rounded-lg text-xs"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="p-3 mt-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-2xl space-y-3
               </div>
             )}
           </div>
