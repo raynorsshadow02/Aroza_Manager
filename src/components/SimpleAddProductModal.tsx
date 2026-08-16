@@ -38,6 +38,7 @@ export default function SimpleAddProductModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sku, setSku] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [subcategory, setSubcategory] = useState('');
   const [description, setDescription] = useState('');
   const [brand, setBrand] = useState('Aroza Collectibles');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,6 +52,7 @@ export default function SimpleAddProductModal({
       setSupplierOrLocation(editingProduct.supplier_name || 'Market');
       setSku(editingProduct.sku || '');
       setCategoryId(editingProduct.category_id || categories[0]?.id || '');
+      setSubcategory(editingProduct.subcategory || '');
       setDescription(editingProduct.description || '');
       setBrand(editingProduct.brand || 'Aroza Collectibles');
       setImagePreview(
@@ -67,6 +69,7 @@ export default function SimpleAddProductModal({
       setNotes('');
       setSku(`ARO-${Math.floor(1000 + Math.random() * 9000)}`);
       setCategoryId(categories[0]?.id || '');
+      setSubcategory('');
       setDescription('');
       setBrand('Aroza Collectibles');
       setImagePreview(null);
@@ -93,6 +96,7 @@ export default function SimpleAddProductModal({
       sku: sku || `ARO-${Math.floor(1000 + Math.random() * 9000)}`,
       category_id: categoryId || categories[0]?.id,
       category_name: selectedCategory?.name || 'Collectible',
+      subcategory: subcategory || undefined,
       brand,
       description,
       purchase_price_default: Number(purchasePrice) || 0,
@@ -232,6 +236,19 @@ export default function SimpleAddProductModal({
                     {c.name}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              <label className="block text-[#2D241E] font-bold mb-1">Subcategory (optional)</label>
+              <select
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+                className="w-full px-3 py-2 bg-[#FAF7F2] border border-[#E8E2D9] rounded-xl font-medium text-sm text-[#2D241E]"
+              >
+                <option value="">None</option>
+                <option value="Rubbers">Rubbers</option>
+                <option value="Metal Kitchens">Metal Kitchens</option>
+                <option value="Weapon Kitchens">Weapon Kitchens</option>
               </select>
             </div>
 
